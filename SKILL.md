@@ -1,6 +1,8 @@
 ---
 name: ai-photos
 description: Build and maintain a personal AI photo album from a local folder of images, using either db9 or TiDB Cloud Zero/Starter as the backend. Use when OpenClaw should guide the user through setup, initialize a photo database, recursively scan a photo folder, extract EXIF and hashes, generate captions with a vision-capable model, keep the index fresh during heartbeats, answer photo-search requests from the backend, and send matching images back to the user.
+metadata:
+  version: 1.0.0
 ---
 
 # ai-photos
