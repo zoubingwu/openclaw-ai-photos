@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -72,7 +72,7 @@
   <body class="bg-white text-apple-darkText h-screen flex overflow-hidden antialiased selection:bg-apple-blue selection:text-white">
     <aside class="w-64 bg-apple-gray/80 backdrop-blur-xl border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col z-20">
       <div class="pt-8 pb-4 px-6">
-        <h1 class="text-xl font-bold tracking-tight">照片</h1>
+        <h1 class="text-xl font-bold tracking-tight">Photos</h1>
       </div>
 
       <nav class="flex-1 px-3 space-y-1">
@@ -80,29 +80,29 @@
           <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
           </svg>
-          图库
+          Library
         </a>
         <a href="#" class="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-200/50 transition-colors">
           <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-8 4h.01M12 8v4"></path>
           </svg>
-          本地状态
+          Local status
         </a>
       </nav>
 
       <div class="p-4">
         <div class="rounded-2xl bg-white/70 border border-gray-200 px-4 py-4 shadow-sm">
           <div class="flex items-center justify-between">
-            <p class="text-xs uppercase tracking-[0.2em] text-gray-400">服务</p>
-            <span id="healthBadge" class="rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600">检查中</span>
+            <p class="text-xs uppercase tracking-[0.2em] text-gray-400">Service</p>
+            <span id="healthBadge" class="rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600">Checking</span>
           </div>
           <dl class="mt-4 space-y-3 text-sm">
             <div class="flex items-center justify-between gap-3">
-              <dt class="text-gray-500">后端</dt>
+              <dt class="text-gray-500">Backend</dt>
               <dd id="backendValue" class="font-medium text-gray-900">-</dd>
             </div>
             <div class="flex items-center justify-between gap-3">
-              <dt class="text-gray-500">来源</dt>
+              <dt class="text-gray-500">Source</dt>
               <dd id="sourceValue" class="font-medium text-gray-900">-</dd>
             </div>
           </dl>
@@ -113,7 +113,7 @@
     <main class="flex-1 flex flex-col relative h-full">
       <header class="sticky top-0 z-10 bg-white/70 backdrop-blur-md border-b border-gray-100 px-4 py-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div class="md:hidden w-full flex justify-between items-center">
-          <h1 class="text-xl font-bold tracking-tight">照片</h1>
+          <h1 class="text-xl font-bold tracking-tight">Photos</h1>
           <button class="text-apple-blue">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
@@ -128,31 +128,31 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
               </svg>
             </div>
-            <input type="text" id="searchInput" placeholder="搜索照片内容、场景、标签..." class="block w-full pl-10 pr-3 py-1.5 border border-transparent rounded-lg leading-5 bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none focus:bg-white focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-all sm:text-sm" />
+            <input type="text" id="searchInput" placeholder="Search captions, scenes, or tags..." class="block w-full pl-10 pr-3 py-1.5 border border-transparent rounded-lg leading-5 bg-gray-100 text-gray-900 placeholder-gray-500 focus:outline-none focus:bg-white focus:ring-2 focus:ring-apple-blue focus:border-transparent transition-all sm:text-sm" />
           </div>
 
           <div class="flex items-center gap-2 w-full sm:w-auto overflow-x-auto no-scrollbar">
             <select id="yearFilter" class="bg-gray-100 text-sm rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-apple-blue text-gray-700 font-medium cursor-pointer outline-none">
-              <option value="">所有年份</option>
+              <option value="">All years</option>
               <option value="2026">2026</option>
               <option value="2025">2025</option>
               <option value="2024">2024</option>
               <option value="2023">2023</option>
             </select>
-            <input id="tagFilter" type="text" placeholder="标签，例如 cat" class="bg-gray-100 text-sm rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-apple-blue text-gray-700 font-medium outline-none min-w-44" />
+            <input id="tagFilter" type="text" placeholder="Tag, for example cat" class="bg-gray-100 text-sm rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-apple-blue text-gray-700 font-medium outline-none min-w-44" />
             <label class="inline-flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700">
               <input id="recentToggle" type="checkbox" class="rounded border-gray-300 text-apple-blue focus:ring-apple-blue" />
-              最近导入
+              Recent imports
             </label>
           </div>
         </form>
       </header>
 
       <div class="px-6 py-4 flex items-center justify-between gap-4 text-sm text-gray-500">
-        <div id="resultCount">正在加载图库...</div>
+        <div id="resultCount">Loading library...</div>
         <div class="flex items-center gap-3">
           <span id="pageIndicator" class="text-xs uppercase tracking-[0.2em] text-gray-400">WINDOWED LIST</span>
-          <span id="loadState" class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">空闲</span>
+          <span id="loadState" class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">Idle</span>
         </div>
       </div>
 
@@ -164,14 +164,14 @@
         <div id="topSpacer" style="height: 0;"></div>
         <div id="photoGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 sm:gap-4"></div>
         <div id="bottomSpacer" style="height: 0;"></div>
-        <div id="scrollHint" class="hidden py-6 text-center text-xs uppercase tracking-[0.24em] text-gray-400">继续滚动以加载更多</div>
+        <div id="scrollHint" class="hidden py-6 text-center text-xs uppercase tracking-[0.24em] text-gray-400">Keep scrolling to load more</div>
 
         <div id="emptyState" class="hidden flex-col items-center justify-center h-64 text-center">
           <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
           </svg>
-          <h3 class="text-lg font-medium text-gray-900">找不到匹配的照片</h3>
-          <p class="text-gray-500 mt-1 text-sm">试试更短的关键词、年份过滤，或者直接切到最近导入。</p>
+          <h3 class="text-lg font-medium text-gray-900">No matching photos</h3>
+          <p class="text-gray-500 mt-1 text-sm">Try a shorter search, a year filter, or switch to recent imports.</p>
         </div>
       </div>
     </main>
@@ -197,7 +197,7 @@
 
         <div id="infoPanel" class="w-80 bg-white/10 backdrop-blur-xl border-l border-white/10 text-white p-6 hidden flex-col gap-6 overflow-y-auto">
           <div>
-            <h2 id="infoTitle" class="text-xl font-semibold mb-1">照片标题</h2>
+            <h2 id="infoTitle" class="text-xl font-semibold mb-1">Photo title</h2>
             <p id="infoDate" class="text-gray-300 text-sm">-</p>
           </div>
 
@@ -207,9 +207,9 @@
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-2.2 0-4 1.8-4 4m4-4c2.2 0 4 1.8 4 4m-4-4v8m0 0h4m-4 0H8"></path>
                 </svg>
-                场景描述
+                Scene
               </div>
-              <p id="infoScene" class="text-gray-200">加载中...</p>
+              <p id="infoScene" class="text-gray-200">Loading...</p>
             </div>
 
             <div class="bg-white/10 rounded-xl p-4">
@@ -217,21 +217,21 @@
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
                 </svg>
-                识别标签
+                Tags
               </div>
               <div id="infoTags" class="flex flex-wrap gap-2 mt-2"></div>
             </div>
 
             <div class="bg-white/10 rounded-xl p-4 text-xs text-gray-300 space-y-2">
-              <div class="flex justify-between gap-3"><span>文字识别</span><span id="infoText">-</span></div>
-              <div class="flex justify-between gap-3"><span>尺寸</span><span id="infoSize">-</span></div>
-              <div class="flex justify-between gap-3"><span>路径</span><span id="infoPath" class="truncate text-right">-</span></div>
+              <div class="flex justify-between gap-3"><span>Text in image</span><span id="infoText">-</span></div>
+              <div class="flex justify-between gap-3"><span>Dimensions</span><span id="infoSize">-</span></div>
+              <div class="flex justify-between gap-3"><span>Path</span><span id="infoPath" class="truncate text-right">-</span></div>
             </div>
           </div>
 
           <div class="flex gap-2">
-            <button id="openOriginalBtn" class="flex-1 rounded-full bg-white text-gray-900 px-4 py-2 text-sm font-semibold hover:bg-gray-100 transition">打开原图</button>
-            <button id="copyPathBtn" class="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold hover:bg-white/10 transition">复制路径</button>
+            <button id="openOriginalBtn" class="flex-1 rounded-full bg-white text-gray-900 px-4 py-2 text-sm font-semibold hover:bg-gray-100 transition">Open original</button>
+            <button id="copyPathBtn" class="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold hover:bg-white/10 transition">Copy path</button>
           </div>
         </div>
       </div>
@@ -337,7 +337,7 @@
         }
         const response = await fetch(state.selected.open_url, { method: 'POST' });
         if (!response.ok) {
-          showError('无法打开原图。');
+          showError('Unable to open the original file.');
           return;
         }
       });
@@ -357,14 +357,14 @@
         try {
           const response = await fetch('/api/health');
           const data = await response.json();
-          healthBadge.textContent = data.ok ? '已连接' : '异常';
+          healthBadge.textContent = data.ok ? 'Ready' : 'Error';
           healthBadge.className = data.ok
             ? 'rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold text-green-700'
             : 'rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700';
           backendValue.textContent = data.backend || '-';
           sourceValue.textContent = data.config_source || '-';
         } catch (error) {
-          healthBadge.textContent = '离线';
+          healthBadge.textContent = 'Offline';
           healthBadge.className = 'rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700';
           backendValue.textContent = '-';
           sourceValue.textContent = '-';
@@ -375,7 +375,7 @@
         clearError();
         state.loadingSearch = true;
         state.loadingPage = false;
-        resultCount.textContent = '正在加载图库...';
+        resultCount.textContent = 'Loading library...';
         updateLoadState();
         state.requestId += 1;
         const requestId = state.requestId;
@@ -418,7 +418,7 @@
             return;
           }
           if (!response.ok) {
-            throw new Error(payload?.error?.message || '搜索失败');
+            throw new Error(payload?.error?.message || 'Search failed');
           }
           state.loadingSearch = false;
           state.page = 1;
@@ -439,7 +439,7 @@
           state.hasMore = false;
           renderVisibleWindow();
           renderMeta();
-          showError(error.message || '搜索失败');
+          showError(error.message || 'Search failed');
         }
       }
 
@@ -460,7 +460,7 @@
             return;
           }
           if (!response.ok) {
-            throw new Error(payload?.error?.message || '加载更多失败');
+            throw new Error(payload?.error?.message || 'Failed to load more');
           }
           state.page += 1;
           state.total = payload.total || state.total;
@@ -471,7 +471,7 @@
           renderMeta();
         } catch (error) {
           if (requestId === state.requestId) {
-            showError(error.message || '加载更多失败');
+            showError(error.message || 'Failed to load more');
           }
         } finally {
           if (requestId === state.requestId) {
@@ -597,12 +597,12 @@
           const response = await fetch(`/api/photos/${photoId}`);
           const photo = await response.json();
           if (!response.ok) {
-            throw new Error(photo?.error?.message || '读取详情失败');
+            throw new Error(photo?.error?.message || 'Failed to load details');
           }
           state.selected = photo;
           infoTitle.textContent = photo.filename;
           infoDate.textContent = formatDate(photo.taken_at);
-          infoScene.textContent = photo.scene || photo.caption || '无额外描述';
+          infoScene.textContent = photo.scene || photo.caption || 'No extra description';
           infoText.textContent = photo.text_in_image || '-';
           infoSize.textContent = photo.width && photo.height ? `${photo.width} × ${photo.height}` : '-';
           infoPath.textContent = photo.file_path || '-';
@@ -610,7 +610,7 @@
           lightboxImg.alt = photo.filename;
           openOriginalBtn.disabled = false;
           copyPathBtn.disabled = false;
-          infoTags.innerHTML = (photo.tags || []).map((tag) => `<span class="px-2.5 py-1 bg-white/20 rounded-full text-xs text-white backdrop-blur-sm border border-white/10">${escapeHTML(tag)}</span>`).join('') || '<span class="text-sm text-gray-300">无标签</span>';
+          infoTags.innerHTML = (photo.tags || []).map((tag) => `<span class="px-2.5 py-1 bg-white/20 rounded-full text-xs text-white backdrop-blur-sm border border-white/10">${escapeHTML(tag)}</span>`).join('') || '<span class="text-sm text-gray-300">No tags</span>';
           lightbox.classList.remove('hidden');
           infoPanel.classList.remove('hidden');
           infoPanel.classList.add('flex');
@@ -618,7 +618,7 @@
             lightbox.classList.remove('opacity-0');
           }, 10);
         } catch (error) {
-          showError(error.message || '读取详情失败');
+          showError(error.message || 'Failed to load details');
         }
       }
 
@@ -632,9 +632,9 @@
 
       function renderMeta() {
         if (state.total === 0) {
-          resultCount.textContent = '未找到照片';
+          resultCount.textContent = 'No photos found';
         } else {
-          resultCount.textContent = `已加载 ${state.items.length} / ${state.total} 张照片`;
+          resultCount.textContent = `Loaded ${state.items.length} of ${state.total} photos`;
         }
         pageIndicator.textContent = `WINDOWED ${state.items.length}`;
         updateLoadState();
@@ -652,7 +652,7 @@
 
       function formatDate(value) {
         if (!value) {
-          return '未知日期';
+          return 'Unknown date';
         }
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
@@ -674,21 +674,21 @@
 
       function updateLoadState() {
         if (state.loadingSearch) {
-          loadState.textContent = '搜索中';
+          loadState.textContent = 'Searching';
           loadState.className = 'rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600';
           return;
         }
         if (state.loadingPage) {
-          loadState.textContent = '加载中';
+          loadState.textContent = 'Loading';
           loadState.className = 'rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600';
           return;
         }
         if (state.hasMore) {
-          loadState.textContent = '滚动追加';
+          loadState.textContent = 'Auto append';
           loadState.className = 'rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600';
           return;
         }
-        loadState.textContent = state.items.length > 0 ? '已到底部' : '空闲';
+        loadState.textContent = state.items.length > 0 ? 'End reached' : 'Idle';
         loadState.className = 'rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600';
       }
 
