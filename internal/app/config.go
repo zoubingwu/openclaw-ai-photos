@@ -1,19 +1,15 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 )
 
-const (
-	defaultHost = "127.0.0.1"
-)
+const defaultHost = "127.0.0.1"
 
 type Options struct {
 	ProfileRef  string
@@ -35,21 +31,10 @@ type Config struct {
 	OpenBrowser  bool
 }
 
-type TiDBTarget struct {
-	Host     string `json:"host"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Database string `json:"database"`
-}
-
-type profileDisk struct {
-	Backend backendDisk `json:"backend"`
-}
-
-type backendDisk struct {
-	Kind       string `json:"kind"`
-	Target     string `json:"target"`
-	TargetFile string `json:"target_file"`
+type BackendSpec struct {
+	Kind       string
+	DB9Target  string
+	TiDBTarget TiDBTarget
 }
 
 type envConfig struct {
@@ -66,7 +51,7 @@ func LoadConfig(opts Options) (Config, error) {
 		OpenBrowser: opts.OpenBrowser,
 	}
 
-	profile, profilePath, err := loadProfile(opts.ProfileRef)
+	profile, _, err := loadOptionalProfile(opts.ProfileRef)
 	if err != nil {
 		return Config{}, err
 	}
@@ -74,7 +59,7 @@ func LoadConfig(opts Options) (Config, error) {
 
 	switch {
 	case profile != nil:
-		cfg.ProfilePath = profilePath
+		cfg.ProfilePath = profile.Path
 		cfg.BackendKind = profile.Backend.Kind
 		cfg.ConfigSource = "profile"
 		if profile.Backend.Kind == "db9" {
@@ -109,11 +94,23 @@ func LoadConfig(opts Options) (Config, error) {
 	return cfg, nil
 }
 
+func (cfg Config) BackendSpec() BackendSpec {
+	return BackendSpec{
+		Kind:       cfg.BackendKind,
+		DB9Target:  cfg.DB9Target,
+		TiDBTarget: cfg.TiDBTarget,
+	}
+}
+
+func (cfg Config) PortString() string {
+	return strconv.Itoa(cfg.Port)
+}
+
 func defaultCacheDir(override string) string {
 	if override != "" {
-		return expandPath(override)
+		return ExpandPath(override)
 	}
-	return filepath.Join(os.TempDir(), "ai-photos-web-cache")
+	return filepath.Join(os.TempDir(), "ai-photos-cache")
 }
 
 func defaultOr(value, fallback string) string {
@@ -121,81 +118,6 @@ func defaultOr(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func defaultAlbumProfilePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".openclaw", "ai-photos", "albums", "default.json")
-}
-
-func resolveProfilePath(ref string) string {
-	if strings.TrimSpace(ref) == "" {
-		return defaultAlbumProfilePath()
-	}
-	if isPathLike(ref) {
-		path := expandPath(ref)
-		if filepath.Ext(path) != ".json" {
-			path += ".json"
-		}
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".openclaw", "ai-photos", "albums", slugify(ref)+".json")
-}
-
-func isPathLike(value string) bool {
-	return strings.Contains(value, "/") || strings.Contains(value, `\`) || strings.HasPrefix(value, "~") || strings.HasSuffix(value, ".json")
-}
-
-func slugify(value string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-	slug := strings.Trim(re.ReplaceAllString(strings.TrimSpace(value), "-"), "-")
-	if slug == "" {
-		return "album"
-	}
-	return strings.ToLower(slug)
-}
-
-func expandPath(path string) string {
-	if path == "" {
-		return ""
-	}
-	if strings.HasPrefix(path, "~") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Clean(filepath.Join(home, strings.TrimPrefix(path, "~")))
-		}
-	}
-	return filepath.Clean(path)
-}
-
-func loadProfile(ref string) (*profileDisk, string, error) {
-	path := resolveProfilePath(ref)
-	if path == "" {
-		return nil, "", nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if ref != "" {
-			return nil, "", fmt.Errorf("load profile: %w", err)
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, "", nil
-		}
-		return nil, "", fmt.Errorf("load default profile: %w", err)
-	}
-
-	var profile profileDisk
-	if err := json.Unmarshal(data, &profile); err != nil {
-		return nil, "", fmt.Errorf("parse profile: %w", err)
-	}
-	return &profile, path, nil
 }
 
 func loadEnvConfig() envConfig {
@@ -209,21 +131,6 @@ func loadEnvConfig() envConfig {
 			Database: strings.TrimSpace(os.Getenv("AI_PHOTOS_TIDB_DATABASE")),
 		},
 	}
-}
-
-func loadTiDBTarget(path string) (TiDBTarget, error) {
-	if strings.TrimSpace(path) == "" {
-		return TiDBTarget{}, errors.New("empty TiDB target file")
-	}
-	data, err := os.ReadFile(expandPath(path))
-	if err != nil {
-		return TiDBTarget{}, err
-	}
-	var target TiDBTarget
-	if err := json.Unmarshal(data, &target); err != nil {
-		return TiDBTarget{}, err
-	}
-	return target, nil
 }
 
 func mergeTiDBTarget(profile, env TiDBTarget) TiDBTarget {
@@ -259,13 +166,5 @@ func validateConfig(cfg Config) error {
 	default:
 		return fmt.Errorf("unsupported backend %q", cfg.BackendKind)
 	}
-
-	if cfg.Port < 0 || cfg.Port > 65535 {
-		return fmt.Errorf("invalid port %d", cfg.Port)
-	}
 	return nil
-}
-
-func (cfg Config) PortString() string {
-	return strconv.Itoa(cfg.Port)
 }

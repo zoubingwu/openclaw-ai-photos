@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"ai-photos-web/frontend"
+	"ai-photos/frontend"
 )
 
 type Server struct {
@@ -21,7 +21,7 @@ type Server struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	backend, err := NewBackend(cfg)
+	backend, err := NewBackend(cfg.BackendSpec())
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +83,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	for _, item := range result.Items {
 		items = append(items, map[string]any{
 			"id":          item.ID,
+			"file_path":   item.FilePath,
 			"filename":    item.Filename,
 			"caption":     item.Caption,
 			"taken_at":    item.TakenAt,

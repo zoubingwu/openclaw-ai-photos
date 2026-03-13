@@ -24,6 +24,8 @@ var (
 type Backend interface {
 	Kind() string
 	Health(context.Context) error
+	Query(context.Context, string) ([][]any, error)
+	Exec(context.Context, string) error
 	Search(context.Context, SearchParams) (SearchResult, error)
 	GetPhoto(context.Context, int64) (PhotoDetail, error)
 }
@@ -47,6 +49,7 @@ type SearchResult struct {
 
 type PhotoSummary struct {
 	ID       int64    `json:"id"`
+	FilePath string   `json:"file_path"`
 	Filename string   `json:"filename"`
 	Caption  string   `json:"caption"`
 	TakenAt  string   `json:"taken_at"`
@@ -57,7 +60,6 @@ type PhotoSummary struct {
 
 type PhotoDetail struct {
 	PhotoSummary
-	FilePath    string   `json:"file_path"`
 	Scene       string   `json:"scene"`
 	Objects     []string `json:"objects"`
 	TextInImage string   `json:"text_in_image"`
@@ -74,21 +76,38 @@ type tidbBackend struct {
 	client *http.Client
 }
 
-func NewBackend(cfg Config) (Backend, error) {
-	switch cfg.BackendKind {
+func NewBackend(spec BackendSpec) (Backend, error) {
+	switch spec.Kind {
 	case "db9":
 		if _, err := exec.LookPath("db9"); err != nil {
 			return nil, fmt.Errorf("db9 backend selected but db9 CLI is not installed")
 		}
-		return &db9Backend{target: cfg.DB9Target}, nil
+		return &db9Backend{target: spec.DB9Target}, nil
 	case "tidb":
 		return &tidbBackend{
-			target: cfg.TiDBTarget,
+			target: spec.TiDBTarget,
 			client: &http.Client{Timeout: 45 * time.Second},
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported backend %q", cfg.BackendKind)
+		return nil, fmt.Errorf("unsupported backend %q", spec.Kind)
 	}
+}
+
+func OpenBackend(kind, target string) (Backend, error) {
+	spec := BackendSpec{Kind: kind}
+	switch kind {
+	case "db9":
+		spec.DB9Target = target
+	case "tidb":
+		tidbTarget, err := loadTiDBTarget(target)
+		if err != nil {
+			return nil, err
+		}
+		spec.TiDBTarget = tidbTarget
+	default:
+		return nil, fmt.Errorf("unsupported backend %q", kind)
+	}
+	return NewBackend(spec)
 }
 
 func (b *db9Backend) Kind() string {
@@ -100,25 +119,34 @@ func (b *tidbBackend) Kind() string {
 }
 
 func (b *db9Backend) Health(ctx context.Context) error {
-	_, err := b.runQuery(ctx, "SELECT 1;")
-	return err
+	return b.Exec(ctx, "SELECT 1;")
 }
 
 func (b *tidbBackend) Health(ctx context.Context) error {
-	_, err := b.runQuery(ctx, "SELECT 1;")
+	return b.Exec(ctx, "SELECT 1;")
+}
+
+func (b *db9Backend) Query(ctx context.Context, sql string) ([][]any, error) {
+	data, err := b.runRaw(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Rows [][]any `json:"rows"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parse db9 response: %w", err)
+	}
+	return response.Rows, nil
+}
+
+func (b *db9Backend) Exec(ctx context.Context, sql string) error {
+	_, err := b.runRaw(ctx, sql)
 	return err
 }
 
 func (b *db9Backend) Search(ctx context.Context, params SearchParams) (SearchResult, error) {
-	rows, total, err := searchWithRunner(ctx, b.Kind(), b.runQuery, params)
-	if err != nil {
-		return SearchResult{}, err
-	}
-	return buildSearchResult(params, total, rows), nil
-}
-
-func (b *tidbBackend) Search(ctx context.Context, params SearchParams) (SearchResult, error) {
-	rows, total, err := searchWithRunner(ctx, b.Kind(), b.runQuery, params)
+	rows, total, err := searchWithRunner(ctx, b.Kind(), b.Query, params)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -126,29 +154,56 @@ func (b *tidbBackend) Search(ctx context.Context, params SearchParams) (SearchRe
 }
 
 func (b *db9Backend) GetPhoto(ctx context.Context, id int64) (PhotoDetail, error) {
-	return loadPhotoWithRunner(ctx, b.Kind(), b.runQuery, id)
+	return loadPhotoWithRunner(ctx, b.Kind(), b.Query, id)
 }
 
-func (b *tidbBackend) GetPhoto(ctx context.Context, id int64) (PhotoDetail, error) {
-	return loadPhotoWithRunner(ctx, b.Kind(), b.runQuery, id)
-}
-
-func (b *db9Backend) runQuery(ctx context.Context, sql string) ([][]any, error) {
+func (b *db9Backend) runRaw(ctx context.Context, sql string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "db9", "--json", "db", "sql", b.target, "-q", sql)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("db9 query failed: %s", strings.TrimSpace(string(out)))
 	}
-	var response struct {
-		Rows [][]any `json:"rows"`
-	}
-	if err := json.Unmarshal(out, &response); err != nil {
-		return nil, fmt.Errorf("parse db9 response: %w", err)
-	}
-	return response.Rows, nil
+	return out, nil
 }
 
-func (b *tidbBackend) runQuery(ctx context.Context, sql string) ([][]any, error) {
+func (b *tidbBackend) Query(ctx context.Context, sql string) ([][]any, error) {
+	data, err := b.runRaw(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Rows []struct {
+			Values []any `json:"values"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parse tidb response: %w", err)
+	}
+	rows := make([][]any, 0, len(response.Rows))
+	for _, row := range response.Rows {
+		rows = append(rows, row.Values)
+	}
+	return rows, nil
+}
+
+func (b *tidbBackend) Exec(ctx context.Context, sql string) error {
+	_, err := b.runRaw(ctx, sql)
+	return err
+}
+
+func (b *tidbBackend) Search(ctx context.Context, params SearchParams) (SearchResult, error) {
+	rows, total, err := searchWithRunner(ctx, b.Kind(), b.Query, params)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	return buildSearchResult(params, total, rows), nil
+}
+
+func (b *tidbBackend) GetPhoto(ctx context.Context, id int64) (PhotoDetail, error) {
+	return loadPhotoWithRunner(ctx, b.Kind(), b.Query, id)
+}
+
+func (b *tidbBackend) runRaw(ctx context.Context, sql string) ([]byte, error) {
 	body, err := json.Marshal(map[string]string{"query": sql})
 	if err != nil {
 		return nil, err
@@ -159,7 +214,7 @@ func (b *tidbBackend) runQuery(ctx context.Context, sql string) ([][]any, error)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "ai-photos-web/0.1")
+	req.Header.Set("User-Agent", "ai-photos/0.1")
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(b.target.Username+":"+b.target.Password)))
 	req.Header.Set("TiDB-Database", b.target.Database)
 
@@ -176,20 +231,7 @@ func (b *tidbBackend) runQuery(ctx context.Context, sql string) ([][]any, error)
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("tidb query failed: %s", strings.TrimSpace(string(data)))
 	}
-
-	var response struct {
-		Rows []struct {
-			Values []any `json:"values"`
-		} `json:"rows"`
-	}
-	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("parse tidb response: %w", err)
-	}
-	rows := make([][]any, 0, len(response.Rows))
-	for _, row := range response.Rows {
-		rows = append(rows, row.Values)
-	}
-	return rows, nil
+	return data, nil
 }
 
 func deriveTiDBHTTPHost(host string) string {
@@ -264,7 +306,7 @@ func buildSearchQueries(kind string, params SearchParams) (string, string) {
 	}
 	offset := (params.Page - 1) * params.PageSize
 	listSQL := fmt.Sprintf(
-		"SELECT id, filename, caption, taken_at, tags, width, height FROM photos WHERE %s ORDER BY %s LIMIT %d OFFSET %d;",
+		"SELECT id, file_path, filename, caption, taken_at, tags, width, height FROM photos WHERE %s ORDER BY %s LIMIT %d OFFSET %d;",
 		where,
 		orderBy,
 		params.PageSize,
@@ -320,12 +362,13 @@ func escapeSQL(value string) string {
 func parsePhotoSummary(row []any) PhotoSummary {
 	return PhotoSummary{
 		ID:       parseInt64(valueAt(row, 0)),
-		Filename: parseString(valueAt(row, 1)),
-		Caption:  parseString(valueAt(row, 2)),
-		TakenAt:  parseString(valueAt(row, 3)),
-		Tags:     parseStringSlice(valueAt(row, 4)),
-		Width:    parseInt(valueAt(row, 5)),
-		Height:   parseInt(valueAt(row, 6)),
+		FilePath: parseString(valueAt(row, 1)),
+		Filename: parseString(valueAt(row, 2)),
+		Caption:  parseString(valueAt(row, 3)),
+		TakenAt:  parseString(valueAt(row, 4)),
+		Tags:     parseStringSlice(valueAt(row, 5)),
+		Width:    parseInt(valueAt(row, 6)),
+		Height:   parseInt(valueAt(row, 7)),
 	}
 }
 
@@ -333,6 +376,7 @@ func parsePhotoDetail(row []any) PhotoDetail {
 	return PhotoDetail{
 		PhotoSummary: PhotoSummary{
 			ID:       parseInt64(valueAt(row, 0)),
+			FilePath: parseString(valueAt(row, 1)),
 			Filename: parseString(valueAt(row, 2)),
 			Caption:  parseString(valueAt(row, 3)),
 			TakenAt:  parseString(valueAt(row, 4)),
@@ -340,7 +384,6 @@ func parsePhotoDetail(row []any) PhotoDetail {
 			Width:    parseInt(valueAt(row, 9)),
 			Height:   parseInt(valueAt(row, 10)),
 		},
-		FilePath:    parseString(valueAt(row, 1)),
 		Scene:       parseString(valueAt(row, 6)),
 		Objects:     parseStringSlice(valueAt(row, 7)),
 		TextInImage: parseString(valueAt(row, 8)),
