@@ -133,7 +133,13 @@
       <div id="errorBanner" class="hidden rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600"></div>
     </div>
 
-    <div id="scrollViewport" class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-20">
+    <!--
+      DISABLE SCROLL ANCHORING:
+      Prevents the browser's native scroll anchoring feature from aggressively
+      adjusting scrollTop when topSpacer/bottomSpacer heights change dynamically,
+      which causes infinite pagination loops and rubber-banding lag.
+    -->
+    <div id="scrollViewport" class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-20" style="overflow-anchor: none;">
       <div id="topSpacer" style="height: 0;"></div>
       <div id="photoGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 sm:gap-4"></div>
       <div id="bottomSpacer" style="height: 0;"></div>
@@ -587,11 +593,17 @@
       }
     }
 
+    let isScrollTicking = false;
+
     function onViewportScroll() {
-      window.requestAnimationFrame(() => {
-        renderVisibleWindow();
-        maybeLoadMore();
-      });
+      if (!isScrollTicking) {
+        window.requestAnimationFrame(() => {
+          renderVisibleWindow();
+          maybeLoadMore();
+          isScrollTicking = false;
+        });
+        isScrollTicking = true;
+      }
     }
 
     function maybeLoadMore() {
