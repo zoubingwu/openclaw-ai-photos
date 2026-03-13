@@ -28,8 +28,8 @@ func NewMediaService(cacheDir string) (*MediaService, error) {
 	return &MediaService{cacheDir: cacheDir}, nil
 }
 
-func (m *MediaService) Resolve(detail PhotoDetail, variant string) (MediaAsset, error) {
-	if _, err := os.Stat(detail.FilePath); err != nil {
+func (m *MediaService) ResolvePath(filePath, variant string) (MediaAsset, error) {
+	if _, err := os.Stat(filePath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return MediaAsset{}, ErrPhotoNotFound
 		}
@@ -47,14 +47,14 @@ func (m *MediaService) Resolve(detail PhotoDetail, variant string) (MediaAsset, 
 	}
 	spec.OutputDir = m.cacheDir
 
-	result, err := PrepareImage(detail.FilePath, spec)
+	result, err := PrepareImage(filePath, spec)
 	if err != nil {
 		return MediaAsset{}, err
 	}
-	if result.OutputPath == detail.FilePath {
+	if result.OutputPath == filePath {
 		return MediaAsset{
-			Path:        detail.FilePath,
-			ContentType: detectContentType(detail.FilePath),
+			Path:        filePath,
+			ContentType: detectContentType(filePath),
 			Derived:     false,
 		}, nil
 	}

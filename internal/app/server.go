@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -45,10 +47,9 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/search", s.handleSearch)
-	mux.HandleFunc("GET /api/photos/{id}", s.handlePhotoDetail)
-	mux.HandleFunc("GET /api/photos/{id}/thumb", s.handlePhotoThumb)
-	mux.HandleFunc("GET /api/photos/{id}/preview", s.handlePhotoPreview)
-	mux.HandleFunc("POST /api/photos/{id}/open", s.handlePhotoOpen)
+	mux.HandleFunc("GET /api/media/thumb", s.handleMediaThumbPath)
+	mux.HandleFunc("GET /api/media/preview", s.handleMediaPreviewPath)
+	mux.HandleFunc("POST /api/open", s.handlePhotoOpenPath)
 	mux.Handle("/", s.handleFrontend())
 	return mux
 }
@@ -82,16 +83,19 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]any, 0, len(result.Items))
 	for _, item := range result.Items {
 		items = append(items, map[string]any{
-			"id":          item.ID,
-			"file_path":   item.FilePath,
-			"filename":    item.Filename,
-			"caption":     item.Caption,
-			"taken_at":    item.TakenAt,
-			"tags":        item.Tags,
-			"width":       item.Width,
-			"height":      item.Height,
-			"thumb_url":   fmt.Sprintf("/api/photos/%d/thumb", item.ID),
-			"preview_url": fmt.Sprintf("/api/photos/%d/preview", item.ID),
+			"id":            item.ID,
+			"file_path":     item.FilePath,
+			"filename":      item.Filename,
+			"caption":       item.Caption,
+			"taken_at":      item.TakenAt,
+			"tags":          item.Tags,
+			"scene":         item.Scene,
+			"text_in_image": item.TextInImage,
+			"width":         item.Width,
+			"height":        item.Height,
+			"thumb_url":     mediaURL("thumb", item.FilePath),
+			"preview_url":   mediaURL("preview", item.FilePath),
+			"open_url":      openURL(item.FilePath),
 		})
 	}
 
@@ -104,60 +108,22 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handlePhotoDetail(w http.ResponseWriter, r *http.Request) {
-	id, err := parseRouteID(r)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-
-	detail, err := s.backend.GetPhoto(r.Context(), id)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":            detail.ID,
-		"filename":      detail.Filename,
-		"caption":       detail.Caption,
-		"taken_at":      detail.TakenAt,
-		"tags":          detail.Tags,
-		"width":         detail.Width,
-		"height":        detail.Height,
-		"scene":         detail.Scene,
-		"objects":       detail.Objects,
-		"text_in_image": detail.TextInImage,
-		"indexed_at":    detail.IndexedAt,
-		"created_at":    detail.CreatedAt,
-		"file_path":     detail.FilePath,
-		"preview_url":   fmt.Sprintf("/api/photos/%d/preview", detail.ID),
-		"open_url":      fmt.Sprintf("/api/photos/%d/open", detail.ID),
-	})
+func (s *Server) handleMediaThumbPath(w http.ResponseWriter, r *http.Request) {
+	s.handleMediaPath(w, r, "thumb")
 }
 
-func (s *Server) handlePhotoThumb(w http.ResponseWriter, r *http.Request) {
-	s.handleMedia(w, r, "thumb")
+func (s *Server) handleMediaPreviewPath(w http.ResponseWriter, r *http.Request) {
+	s.handleMediaPath(w, r, "preview")
 }
 
-func (s *Server) handlePhotoPreview(w http.ResponseWriter, r *http.Request) {
-	s.handleMedia(w, r, "preview")
-}
-
-func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request, variant string) {
-	id, err := parseRouteID(r)
+func (s *Server) handleMediaPath(w http.ResponseWriter, r *http.Request, variant string) {
+	filePath, err := parseRequestedPath(r)
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
 
-	detail, err := s.backend.GetPhoto(r.Context(), id)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-
-	asset, err := s.media.Resolve(detail, variant)
+	asset, err := s.media.ResolvePath(filePath, variant)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -171,26 +137,23 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request, variant str
 	http.ServeFile(w, r, asset.Path)
 }
 
-func (s *Server) handlePhotoOpen(w http.ResponseWriter, r *http.Request) {
-	id, err := parseRouteID(r)
+func (s *Server) handlePhotoOpenPath(w http.ResponseWriter, r *http.Request) {
+	filePath, err := parseRequestedPath(r)
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-
-	detail, err := s.backend.GetPhoto(r.Context(), id)
-	if err != nil {
+	if _, err := filepath.Abs(filePath); err != nil {
 		s.writeError(w, err)
 		return
 	}
-	if err := OpenLocalFile(detail.FilePath); err != nil {
+	if err := OpenLocalFile(filePath); err != nil {
 		s.writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":       true,
-		"opened":   detail.FilePath,
-		"filename": detail.Filename,
+		"ok":     true,
+		"opened": filePath,
 	})
 }
 
@@ -240,12 +203,28 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func parseRouteID(r *http.Request) (int64, error) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("%w: invalid photo id", ErrInvalidSearch)
+func parseRequestedPath(r *http.Request) (string, error) {
+	rawPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if rawPath == "" {
+		return "", fmt.Errorf("%w: missing file path", ErrInvalidSearch)
 	}
-	return id, nil
+	path, err := filepath.Abs(ExpandPath(rawPath))
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func mediaURL(variant, filePath string) string {
+	query := url.Values{}
+	query.Set("path", filePath)
+	return "/api/media/" + variant + "?" + query.Encode()
+}
+
+func openURL(filePath string) string {
+	query := url.Values{}
+	query.Set("path", filePath)
+	return "/api/open?" + query.Encode()
 }
 
 func parseIntWithFallback(value string, fallback int) int {

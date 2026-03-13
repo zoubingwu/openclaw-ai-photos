@@ -128,6 +128,14 @@
         <div id="photoGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 sm:gap-4"></div>
         <div id="bottomSpacer" style="height: 0;"></div>
         <div id="scrollHint" class="hidden py-6 text-center text-xs uppercase tracking-[0.24em] text-gray-400">Keep scrolling to load more</div>
+        <div id="loadingMore" class="hidden items-center justify-center gap-3 py-6 text-sm text-gray-500">
+          <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700"></span>
+          <span>Loading more photos...</span>
+        </div>
+        <div id="searchLoadingState" class="hidden h-40 items-center justify-center gap-3 text-sm text-gray-500">
+          <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700"></span>
+          <span>Searching photos...</span>
+        </div>
 
         <div id="emptyState" class="hidden flex-col items-center justify-center h-64 text-center">
           <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,6 +241,8 @@
       const emptyState = document.getElementById('emptyState');
       const errorBanner = document.getElementById('errorBanner');
       const scrollHint = document.getElementById('scrollHint');
+      const loadingMore = document.getElementById('loadingMore');
+      const searchLoadingState = document.getElementById('searchLoadingState');
       const lightbox = document.getElementById('lightbox');
       const lightboxImg = document.getElementById('lightboxImg');
       const closeLightbox = document.getElementById('closeLightbox');
@@ -304,6 +314,7 @@
         state.loadingSearch = true;
         state.loadingPage = false;
         resultCount.textContent = 'Loading library...';
+        renderPagingState();
         state.requestId += 1;
         const requestId = state.requestId;
 
@@ -321,6 +332,7 @@
           bottomSpacer.style.height = '0px';
           scrollViewport.scrollTop = 0;
           bottomSpacer.style.height = '0px';
+          renderVisibleWindow();
         }
 
         const params = new URLSearchParams({
@@ -353,6 +365,7 @@
           recomputeVirtualMetrics();
           renderVisibleWindow();
           renderMeta();
+          renderPagingState();
           maybeLoadMore();
         } catch (error) {
           if (requestId !== state.requestId) {
@@ -364,6 +377,7 @@
           state.hasMore = false;
           renderVisibleWindow();
           renderMeta();
+          renderPagingState();
           showError(error.message || 'Search failed');
         }
       }
@@ -373,6 +387,7 @@
           return;
         }
         state.loadingPage = true;
+        renderPagingState();
 
         const params = buildQueryParams(state.page + 1);
         const requestId = state.requestId;
@@ -393,6 +408,7 @@
           recomputeVirtualMetrics();
           renderVisibleWindow();
           renderMeta();
+          renderPagingState();
         } catch (error) {
           if (requestId === state.requestId) {
             showError(error.message || 'Failed to load more');
@@ -400,6 +416,7 @@
         } finally {
           if (requestId === state.requestId) {
             state.loadingPage = false;
+            renderPagingState();
           }
         }
       }
@@ -423,6 +440,23 @@
       function renderVisibleWindow() {
         const photos = state.items;
 
+        if (state.loadingSearch) {
+          state.virtual.renderedStartRow = -1;
+          state.virtual.renderedEndRow = -1;
+          state.virtual.renderedTotalRows = -1;
+          state.virtual.renderedColumns = -1;
+          photoGrid.replaceChildren();
+          photoGrid.classList.add('hidden');
+          emptyState.classList.add('hidden');
+          searchLoadingState.classList.remove('hidden');
+          searchLoadingState.classList.add('flex');
+          renderPagingState();
+          return;
+        }
+
+        searchLoadingState.classList.add('hidden');
+        searchLoadingState.classList.remove('flex');
+
         if (photos.length === 0) {
           state.virtual.renderedStartRow = -1;
           state.virtual.renderedEndRow = -1;
@@ -431,13 +465,13 @@
           photoGrid.replaceChildren();
           photoGrid.classList.add('hidden');
           emptyState.classList.remove('hidden');
-          scrollHint.classList.add('hidden');
+          renderPagingState();
           return;
         }
 
         photoGrid.classList.remove('hidden');
         emptyState.classList.add('hidden');
-        scrollHint.classList.toggle('hidden', !state.hasMore);
+        renderPagingState();
 
         const columns = state.virtual.columns;
         const rowStride = state.virtual.itemHeight + state.virtual.gap;
@@ -483,7 +517,7 @@
               </svg>
             </div>
           `;
-          card.addEventListener('click', () => openLightbox(photo.id));
+          card.addEventListener('click', () => openLightbox(photo));
           fragment.appendChild(card);
         });
 
@@ -526,35 +560,26 @@
         }
       }
 
-      async function openLightbox(photoId) {
+      function openLightbox(photo) {
         clearError();
-        try {
-          const response = await fetch(`/api/photos/${photoId}`);
-          const photo = await response.json();
-          if (!response.ok) {
-            throw new Error(photo?.error?.message || 'Failed to load details');
-          }
-          state.selected = photo;
-          infoTitle.textContent = photo.filename;
-          infoDate.textContent = formatDate(photo.taken_at);
-          infoScene.textContent = photo.scene || photo.caption || 'No extra description';
-          infoText.textContent = photo.text_in_image || '-';
-          infoSize.textContent = photo.width && photo.height ? `${photo.width} × ${photo.height}` : '-';
-          infoPath.textContent = photo.file_path || '-';
-          lightboxImg.src = photo.preview_url;
-          lightboxImg.alt = photo.filename;
-          openOriginalBtn.disabled = false;
-          copyPathBtn.disabled = false;
-          infoTags.innerHTML = (photo.tags || []).map((tag) => `<span class="px-2.5 py-1 bg-white/20 rounded-full text-xs text-white backdrop-blur-sm border border-white/10">${escapeHTML(tag)}</span>`).join('') || '<span class="text-sm text-gray-300">No tags</span>';
-          lightbox.classList.remove('hidden');
-          infoPanel.classList.remove('hidden');
-          infoPanel.classList.add('flex');
-          setTimeout(() => {
-            lightbox.classList.remove('opacity-0');
-          }, 10);
-        } catch (error) {
-          showError(error.message || 'Failed to load details');
-        }
+        state.selected = photo;
+        infoTitle.textContent = photo.filename;
+        infoDate.textContent = formatDate(photo.taken_at);
+        infoScene.textContent = photo.scene || photo.caption || 'No extra description';
+        infoText.textContent = photo.text_in_image || '-';
+        infoSize.textContent = photo.width && photo.height ? `${photo.width} × ${photo.height}` : '-';
+        infoPath.textContent = photo.file_path || '-';
+        lightboxImg.src = photo.preview_url;
+        lightboxImg.alt = photo.filename;
+        openOriginalBtn.disabled = false;
+        copyPathBtn.disabled = false;
+        infoTags.innerHTML = (photo.tags || []).map((tag) => `<span class="px-2.5 py-1 bg-white/20 rounded-full text-xs text-white backdrop-blur-sm border border-white/10">${escapeHTML(tag)}</span>`).join('') || '<span class="text-sm text-gray-300">No tags</span>';
+        lightbox.classList.remove('hidden');
+        infoPanel.classList.remove('hidden');
+        infoPanel.classList.add('flex');
+        setTimeout(() => {
+          lightbox.classList.remove('opacity-0');
+        }, 10);
       }
 
       function closeLightboxHandler() {
@@ -571,6 +596,14 @@
         } else {
           resultCount.textContent = `${state.total} photos`;
         }
+      }
+
+      function renderPagingState() {
+        const showLoading = state.loadingPage && state.items.length > 0;
+        const showHint = !state.loadingSearch && !state.loadingPage && state.hasMore && state.items.length > 0;
+        loadingMore.classList.toggle('hidden', !showLoading);
+        loadingMore.classList.toggle('flex', showLoading);
+        scrollHint.classList.toggle('hidden', !showHint);
       }
 
       function showError(message) {

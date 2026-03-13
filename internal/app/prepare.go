@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var directCaptionExts = map[string]struct{}{
@@ -24,6 +25,8 @@ var directCaptionExts = map[string]struct{}{
 	".png":  {},
 	".webp": {},
 }
+
+var derivedImageLocks sync.Map
 
 type PrepareSpec struct {
 	Name                 string
@@ -81,8 +84,8 @@ func PreviewPrepareSpec() PrepareSpec {
 func MediaThumbSpec() PrepareSpec {
 	return PrepareSpec{
 		Name:                 "thumb",
-		MaxEdge:              480,
-		PassthroughEdge:      520,
+		MaxEdge:              640,
+		PassthroughEdge:      1280,
 		Quality:              "72",
 		AllowOriginalOnError: true,
 	}
@@ -92,7 +95,7 @@ func MediaPreviewSpec() PrepareSpec {
 	return PrepareSpec{
 		Name:                 "preview",
 		MaxEdge:              1800,
-		PassthroughEdge:      1900,
+		PassthroughEdge:      2400,
 		Quality:              "82",
 		AllowOriginalOnError: true,
 	}
@@ -212,17 +215,19 @@ func prepareWithBackend(source string, spec PrepareSpec, backend imageBackend) (
 	}
 
 	output := deriveOutputPath(source, spec)
-	if outWidth, outHeight, ok := readCachedDerivedImage(output); ok {
+	return withDerivedImageLock(output, func() (PrepareResult, error) {
+		if outWidth, outHeight, ok := readCachedDerivedImage(output); ok {
+			return buildPrepareResult(source, output, backend.name, spec, outWidth, outHeight, false), nil
+		}
+		if err := writeDerivedImage(backend, source, output, spec); err != nil {
+			return PrepareResult{}, err
+		}
+		outWidth, outHeight, err := readDimensions(backend, output)
+		if err != nil {
+			return PrepareResult{}, err
+		}
 		return buildPrepareResult(source, output, backend.name, spec, outWidth, outHeight, false), nil
-	}
-	if err := writeDerivedImage(backend, source, output, spec); err != nil {
-		return PrepareResult{}, err
-	}
-	outWidth, outHeight, err := readDimensions(backend, output)
-	if err != nil {
-		return PrepareResult{}, err
-	}
-	return buildPrepareResult(source, output, backend.name, spec, outWidth, outHeight, false), nil
+	})
 }
 
 func readCachedDerivedImage(path string) (int, int, bool) {
@@ -235,6 +240,14 @@ func readCachedDerivedImage(path string) (int, int, bool) {
 		return 0, 0, false
 	}
 	return width, height, true
+}
+
+func withDerivedImageLock(path string, fn func() (PrepareResult, error)) (PrepareResult, error) {
+	lockValue, _ := derivedImageLocks.LoadOrStore(path, &sync.Mutex{})
+	lock := lockValue.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+	return fn()
 }
 
 func deriveOutputPath(path string, spec PrepareSpec) string {

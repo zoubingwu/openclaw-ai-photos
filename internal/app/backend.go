@@ -27,7 +27,6 @@ type Backend interface {
 	Query(context.Context, string) ([][]any, error)
 	Exec(context.Context, string) error
 	Search(context.Context, SearchParams) (SearchResult, error)
-	GetPhoto(context.Context, int64) (PhotoDetail, error)
 }
 
 type SearchParams struct {
@@ -48,23 +47,16 @@ type SearchResult struct {
 }
 
 type PhotoSummary struct {
-	ID       int64    `json:"id"`
-	FilePath string   `json:"file_path"`
-	Filename string   `json:"filename"`
-	Caption  string   `json:"caption"`
-	TakenAt  string   `json:"taken_at"`
-	Tags     []string `json:"tags"`
-	Width    int      `json:"width"`
-	Height   int      `json:"height"`
-}
-
-type PhotoDetail struct {
-	PhotoSummary
+	ID          int64    `json:"id"`
+	FilePath    string   `json:"file_path"`
+	Filename    string   `json:"filename"`
+	Caption     string   `json:"caption"`
+	TakenAt     string   `json:"taken_at"`
+	Tags        []string `json:"tags"`
 	Scene       string   `json:"scene"`
-	Objects     []string `json:"objects"`
 	TextInImage string   `json:"text_in_image"`
-	IndexedAt   string   `json:"indexed_at"`
-	CreatedAt   string   `json:"created_at"`
+	Width       int      `json:"width"`
+	Height      int      `json:"height"`
 }
 
 type db9Backend struct {
@@ -153,10 +145,6 @@ func (b *db9Backend) Search(ctx context.Context, params SearchParams) (SearchRes
 	return buildSearchResult(params, total, rows), nil
 }
 
-func (b *db9Backend) GetPhoto(ctx context.Context, id int64) (PhotoDetail, error) {
-	return loadPhotoWithRunner(ctx, b.Kind(), b.Query, id)
-}
-
 func (b *db9Backend) runRaw(ctx context.Context, sql string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "db9", "--json", "db", "sql", b.target, "-q", sql)
 	out, err := cmd.CombinedOutput()
@@ -197,10 +185,6 @@ func (b *tidbBackend) Search(ctx context.Context, params SearchParams) (SearchRe
 		return SearchResult{}, err
 	}
 	return buildSearchResult(params, total, rows), nil
-}
-
-func (b *tidbBackend) GetPhoto(ctx context.Context, id int64) (PhotoDetail, error) {
-	return loadPhotoWithRunner(ctx, b.Kind(), b.Query, id)
 }
 
 func (b *tidbBackend) runRaw(ctx context.Context, sql string) ([]byte, error) {
@@ -267,17 +251,6 @@ func searchWithRunner(ctx context.Context, kind string, runner func(context.Cont
 	return items, total, nil
 }
 
-func loadPhotoWithRunner(ctx context.Context, kind string, runner func(context.Context, string) ([][]any, error), id int64) (PhotoDetail, error) {
-	rows, err := runner(ctx, buildPhotoDetailQuery(kind, id))
-	if err != nil {
-		return PhotoDetail{}, err
-	}
-	if len(rows) == 0 {
-		return PhotoDetail{}, ErrPhotoNotFound
-	}
-	return parsePhotoDetail(rows[0]), nil
-}
-
 func validateSearchParams(params SearchParams) error {
 	if params.Recent && (params.Text != "" || params.Tag != "" || params.Date != "") {
 		return fmt.Errorf("%w: recent cannot be combined with text, tag, or date", ErrInvalidSearch)
@@ -306,7 +279,7 @@ func buildSearchQueries(kind string, params SearchParams) (string, string) {
 	}
 	offset := (params.Page - 1) * params.PageSize
 	listSQL := fmt.Sprintf(
-		"SELECT id, file_path, filename, caption, taken_at, tags, width, height FROM photos WHERE %s ORDER BY %s LIMIT %d OFFSET %d;",
+		"SELECT id, file_path, filename, caption, taken_at, tags, scene, text_in_image, width, height FROM photos WHERE %s ORDER BY %s LIMIT %d OFFSET %d;",
 		where,
 		orderBy,
 		params.PageSize,
@@ -314,13 +287,6 @@ func buildSearchQueries(kind string, params SearchParams) (string, string) {
 	)
 	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM photos WHERE %s;", where)
 	return listSQL, countSQL
-}
-
-func buildPhotoDetailQuery(kind string, id int64) string {
-	return fmt.Sprintf(
-		"SELECT id, file_path, filename, caption, taken_at, tags, scene, objects, text_in_image, width, height, indexed_at, created_at FROM photos WHERE id = %d LIMIT 1;",
-		id,
-	)
 }
 
 func buildWhereClause(kind string, params SearchParams) string {
@@ -361,34 +327,16 @@ func escapeSQL(value string) string {
 
 func parsePhotoSummary(row []any) PhotoSummary {
 	return PhotoSummary{
-		ID:       parseInt64(valueAt(row, 0)),
-		FilePath: parseString(valueAt(row, 1)),
-		Filename: parseString(valueAt(row, 2)),
-		Caption:  parseString(valueAt(row, 3)),
-		TakenAt:  parseString(valueAt(row, 4)),
-		Tags:     parseStringSlice(valueAt(row, 5)),
-		Width:    parseInt(valueAt(row, 6)),
-		Height:   parseInt(valueAt(row, 7)),
-	}
-}
-
-func parsePhotoDetail(row []any) PhotoDetail {
-	return PhotoDetail{
-		PhotoSummary: PhotoSummary{
-			ID:       parseInt64(valueAt(row, 0)),
-			FilePath: parseString(valueAt(row, 1)),
-			Filename: parseString(valueAt(row, 2)),
-			Caption:  parseString(valueAt(row, 3)),
-			TakenAt:  parseString(valueAt(row, 4)),
-			Tags:     parseStringSlice(valueAt(row, 5)),
-			Width:    parseInt(valueAt(row, 9)),
-			Height:   parseInt(valueAt(row, 10)),
-		},
+		ID:          parseInt64(valueAt(row, 0)),
+		FilePath:    parseString(valueAt(row, 1)),
+		Filename:    parseString(valueAt(row, 2)),
+		Caption:     parseString(valueAt(row, 3)),
+		TakenAt:     parseString(valueAt(row, 4)),
+		Tags:        parseStringSlice(valueAt(row, 5)),
 		Scene:       parseString(valueAt(row, 6)),
-		Objects:     parseStringSlice(valueAt(row, 7)),
-		TextInImage: parseString(valueAt(row, 8)),
-		IndexedAt:   parseString(valueAt(row, 11)),
-		CreatedAt:   parseString(valueAt(row, 12)),
+		TextInImage: parseString(valueAt(row, 7)),
+		Width:       parseInt(valueAt(row, 8)),
+		Height:      parseInt(valueAt(row, 9)),
 	}
 }
 
