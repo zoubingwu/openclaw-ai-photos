@@ -99,6 +99,16 @@ type SetupSummary struct {
 
 const importBatchSize = 50
 
+type importExistingRecord struct {
+	FilePath    string
+	Caption     string
+	Tags        []string
+	Scene       string
+	Objects     []string
+	TextInImage string
+	Metadata    map[string]any
+}
+
 func InitSchema(ctx context.Context, target, backend, profileRef string) (InitSummary, error) {
 	resolvedBackend, resolvedTarget, _, err := ResolveBackendTarget(target, backend, profileRef)
 	if err != nil {
@@ -146,10 +156,14 @@ func ImportRecords(ctx context.Context, target, jsonlPath, backend, profileRef s
 		if len(batch) == 0 {
 			return nil
 		}
-		if err := store.Exec(ctx, buildImportSQL(resolvedBackend, batch)); err != nil {
+		mergedBatch, err := mergeImportBatch(ctx, store, batch)
+		if err != nil {
 			return err
 		}
-		imported += len(batch)
+		if err := store.Exec(ctx, buildImportSQL(resolvedBackend, mergedBatch)); err != nil {
+			return err
+		}
+		imported += len(mergedBatch)
 		batch = batch[:0]
 		return nil
 	}
@@ -222,9 +236,6 @@ func normalizeRecord(record map[string]any) {
 	if record["exif"] == nil {
 		record["exif"] = map[string]any{}
 	}
-	if stringValue(record["search_text"]) == "" {
-		record["search_text"] = buildSearchText(record)
-	}
 }
 
 func buildSearchText(record map[string]any) string {
@@ -247,6 +258,129 @@ func buildSearchText(record map[string]any) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+func mergeImportBatch(ctx context.Context, backend Backend, batch []map[string]any) ([]map[string]any, error) {
+	existing, err := fetchExistingImportRecords(ctx, backend, batch)
+	if err != nil {
+		return nil, err
+	}
+	merged := make([]map[string]any, 0, len(batch))
+	for _, record := range batch {
+		normalizeRecord(record)
+		if current, ok := existing[stringValue(record["file_path"])]; ok {
+			mergeImportRecord(record, current)
+		}
+		record["search_text"] = buildSearchText(record)
+		merged = append(merged, record)
+	}
+	return merged, nil
+}
+
+func fetchExistingImportRecords(ctx context.Context, backend Backend, batch []map[string]any) (map[string]importExistingRecord, error) {
+	paths := make([]string, 0, len(batch))
+	seen := make(map[string]struct{}, len(batch))
+	for _, record := range batch {
+		path := stringValue(record["file_path"])
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return map[string]importExistingRecord{}, nil
+	}
+	literals := make([]string, 0, len(paths))
+	for _, path := range paths {
+		literals = append(literals, sqlLiteral(path))
+	}
+	rows, err := backend.Query(ctx, fmt.Sprintf(
+		"SELECT file_path, caption, tags, scene, objects, text_in_image, metadata FROM photos WHERE file_path IN (%s);",
+		strings.Join(literals, ", "),
+	))
+	if err != nil {
+		return nil, err
+	}
+	records := make(map[string]importExistingRecord, len(rows))
+	for _, row := range rows {
+		current := importExistingRecord{
+			FilePath:    parseString(valueAt(row, 0)),
+			Caption:     parseString(valueAt(row, 1)),
+			Tags:        parseStringSlice(valueAt(row, 2)),
+			Scene:       parseString(valueAt(row, 3)),
+			Objects:     parseStringSlice(valueAt(row, 4)),
+			TextInImage: parseString(valueAt(row, 5)),
+			Metadata:    parseStringMap(valueAt(row, 6)),
+		}
+		records[current.FilePath] = current
+	}
+	return records, nil
+}
+
+func mergeImportRecord(record map[string]any, existing importExistingRecord) {
+	record["caption"] = preferIncomingText(record["caption"], existing.Caption)
+	record["scene"] = preferIncomingText(record["scene"], existing.Scene)
+	record["text_in_image"] = preferIncomingNullableText(record["text_in_image"], existing.TextInImage)
+	record["tags"] = mergeStringLists(existing.Tags, parseStringSlice(record["tags"]))
+	record["objects"] = mergeStringLists(existing.Objects, parseStringSlice(record["objects"]))
+	record["metadata"] = mergeStringMaps(existing.Metadata, parseStringMap(record["metadata"]))
+}
+
+func preferIncomingText(incoming any, existing string) string {
+	text := strings.TrimSpace(stringValue(incoming))
+	if text != "" {
+		return text
+	}
+	return existing
+}
+
+func preferIncomingNullableText(incoming any, existing string) any {
+	text := strings.TrimSpace(stringValue(incoming))
+	if text != "" {
+		return text
+	}
+	if strings.TrimSpace(existing) != "" {
+		return existing
+	}
+	return nil
+}
+
+func mergeStringLists(existing, incoming []string) []string {
+	merged := make([]string, 0, len(existing)+len(incoming))
+	seen := make(map[string]struct{}, len(existing)+len(incoming))
+	for _, value := range append(existing, incoming...) {
+		text := strings.TrimSpace(value)
+		if text == "" {
+			continue
+		}
+		if _, ok := seen[text]; ok {
+			continue
+		}
+		seen[text] = struct{}{}
+		merged = append(merged, text)
+	}
+	if len(merged) == 0 {
+		return []string{}
+	}
+	return merged
+}
+
+func mergeStringMaps(existing, incoming map[string]any) map[string]any {
+	if len(existing) == 0 && len(incoming) == 0 {
+		return map[string]any{}
+	}
+	merged := make(map[string]any, len(existing)+len(incoming))
+	for key, value := range existing {
+		merged[key] = value
+	}
+	for key, value := range incoming {
+		merged[key] = value
+	}
+	return merged
 }
 
 func buildImportSQL(backend string, records []map[string]any) string {
