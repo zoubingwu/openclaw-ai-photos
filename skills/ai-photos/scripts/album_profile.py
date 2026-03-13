@@ -14,20 +14,24 @@ PROFILE_VERSION = 1
 
 
 def ensure_storage_dirs():
+    """Create the default directories used for album profiles and saved targets."""
     ALBUMS_DIR.mkdir(parents=True, exist_ok=True)
     TARGETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def slugify_album_id(value):
+    """Convert a profile or album name into a stable filesystem-safe id."""
     slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", value.strip()).strip("-").lower()
     return slug or "album"
 
 
 def is_path_like(value):
+    """Detect whether a profile reference already looks like a filesystem path."""
     return any(ch in value for ch in ("/", "\\")) or value.startswith("~") or value.endswith(".json")
 
 
 def resolve_profile_path(ref):
+    """Resolve a profile name or path into the concrete profile JSON path."""
     ensure_storage_dirs()
     if is_path_like(ref):
         path = Path(ref).expanduser()
@@ -38,12 +42,14 @@ def resolve_profile_path(ref):
 
 
 def _require(mapping, key, path):
+    """Read a required key from a mapping and raise a clear profile error if missing."""
     if key not in mapping:
         raise ValueError(f"missing '{key}' in profile: {path}")
     return mapping[key]
 
 
 def normalize_sources(sources):
+    """Normalize source folders into unique absolute roots without nested duplicates."""
     normalized = []
     for source in sources:
         path = str(Path(source).expanduser().resolve())
@@ -75,6 +81,7 @@ def normalize_sources(sources):
 
 
 def load_profile(ref):
+    """Load a saved album profile and validate its required fields."""
     path = resolve_profile_path(ref)
     with open(path, encoding="utf-8") as f:
         profile = json.load(f)
@@ -100,6 +107,7 @@ def load_profile(ref):
 
 
 def backend_target_from_profile(profile):
+    """Extract the backend kind and concrete target from a loaded profile."""
     backend = profile["backend"]["kind"]
     if backend == "db9":
         return backend, profile["backend"]["target"]
@@ -107,16 +115,19 @@ def backend_target_from_profile(profile):
 
 
 def sources_from_profile(profile):
+    """Return the normalized source roots stored in a loaded profile."""
     return normalize_sources(profile["sources"])
 
 
 def _target_matches(backend, given, resolved):
+    """Compare a provided target with the target resolved from a profile."""
     if backend == "tidb":
         return str(Path(given).expanduser().resolve()) == str(Path(resolved).expanduser().resolve())
     return str(given) == str(resolved)
 
 
 def resolve_backend_target(target=None, backend=None, profile_ref=None):
+    """Resolve the backend kind and target from raw args or a saved profile."""
     profile = load_profile(profile_ref) if profile_ref else None
     if profile is None:
         if target is None:
@@ -132,6 +143,7 @@ def resolve_backend_target(target=None, backend=None, profile_ref=None):
 
 
 def resolve_sources(sources=None, profile=None):
+    """Resolve source roots from raw args or validate them against a saved profile."""
     sources = sources or []
     if profile is None:
         return normalize_sources(sources)
@@ -146,6 +158,7 @@ def resolve_sources(sources=None, profile=None):
 
 
 def save_profile(profile_ref, sources, backend, target, display_name=None, maintenance_mode="heartbeat"):
+    """Persist an album profile and, for TiDB, copy its target JSON into managed storage."""
     ensure_storage_dirs()
     profile_path = resolve_profile_path(profile_ref)
     album_id = slugify_album_id(profile_path.stem if is_path_like(profile_ref) else profile_ref)

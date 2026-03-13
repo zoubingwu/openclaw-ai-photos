@@ -11,6 +11,7 @@ from tidb_http_sql import run_query, load_target  # noqa: E402
 
 
 def sql_literal(value):
+    """Convert a Python value into a SQL literal for the simple import statements."""
     if value is None:
         return 'NULL'
     if isinstance(value, bool):
@@ -24,6 +25,7 @@ def sql_literal(value):
 
 
 def build_search_text(rec):
+    """Build fallback search text from caption and tag-like fields."""
     parts = []
     for key in ("caption", "scene", "text_in_image"):
         if rec.get(key):
@@ -35,6 +37,7 @@ def build_search_text(rec):
 
 
 def run_db9(target, sql):
+    """Execute one SQL statement against a db9 database target."""
     cmd = ["db9", "db", "sql", target, "-q", sql]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -43,11 +46,13 @@ def run_db9(target, sql):
 
 
 def run_tidb(target, sql):
+    """Execute one SQL statement against a TiDB HTTP target."""
     t = load_target(target)
     run_query(t["host"], t["username"], t["password"], t["database"], sql)
 
 
 def main():
+    """Import captioned records into the selected backend with upsert semantics."""
     ap = argparse.ArgumentParser(description="Import caption records into db9 or TiDB")
     ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
     ap.add_argument("jsonl", help="JSONL records with manifest + caption fields")

@@ -12,6 +12,7 @@ from tidb_http_sql import run_query, load_target  # noqa: E402
 
 
 def run(cmd):
+    """Execute a subprocess command and return stdout or raise a readable error."""
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True)
     except FileNotFoundError:
@@ -22,6 +23,7 @@ def run(cmd):
 
 
 def fetch_existing_db9(target):
+    """Read existing file hashes from a db9 backend for incremental comparison."""
     out = run(["db9", "db", "sql", target, "-q", "SELECT file_path, sha256 FROM photos;"])
     rows = {}
     for line in out.splitlines():
@@ -35,6 +37,7 @@ def fetch_existing_db9(target):
 
 
 def fetch_existing_tidb(target):
+    """Read existing file hashes from a TiDB backend for incremental comparison."""
     t = load_target(target)
     out = run_query(t["host"], t["username"], t["password"], t["database"], "SELECT file_path, sha256 FROM photos;")
     data = json.loads(out)
@@ -47,17 +50,20 @@ def fetch_existing_tidb(target):
 
 
 def load_manifest(path):
+    """Load a JSONL manifest file into memory."""
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
 def save_manifest(path, records):
+    """Write manifest records back to JSONL format."""
     with open(path, 'w', encoding='utf-8') as out:
         for rec in records:
             out.write(json.dumps(rec, ensure_ascii=False) + '\n')
 
 
 def main():
+    """Build the next incremental sync manifest for the selected album sources."""
     ap = argparse.ArgumentParser(description="Run an incremental sync flow for the AI photo album")
     ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
     ap.add_argument("sources", nargs="*", help="one or more photo source folders")

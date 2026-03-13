@@ -6,6 +6,7 @@ from album_profile import save_profile
 
 
 def main():
+    """Create or update a managed album profile from CLI arguments."""
     ap = argparse.ArgumentParser(description="Create or update an ai-photos album profile")
     ap.add_argument("profile", help="profile name or path to profile JSON")
     ap.add_argument("--source", action="append", required=True, help="photo source folder; repeat to add multiple roots")

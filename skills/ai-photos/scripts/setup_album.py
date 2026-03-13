@@ -9,6 +9,7 @@ from album_profile import save_profile
 
 
 def run_script(script_name, args):
+    """Run a sibling setup script and parse JSON output when available."""
     cmd = [sys.executable, str(Path(__file__).with_name(script_name)), *args]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -24,6 +25,7 @@ def run_script(script_name, args):
 
 
 def main():
+    """Run the preferred setup path: save profile, init backend, and build sync input."""
     ap = argparse.ArgumentParser(
         description="Save an album profile, initialize the backend, and build the first incremental manifest"
     )

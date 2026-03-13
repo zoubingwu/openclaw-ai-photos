@@ -21,6 +21,7 @@ EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 
 
 def sha256_file(path):
+    """Compute the content hash used to detect new or changed files."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
@@ -29,6 +30,7 @@ def sha256_file(path):
 
 
 def extract_exif(path):
+    """Read basic image dimensions and EXIF metadata when Pillow is available."""
     info = {"width": None, "height": None, "taken_at": None, "exif": {}}
     if Image is None:
         return info
@@ -56,12 +58,14 @@ def extract_exif(path):
 
 
 def iter_files(root):
+    """Yield files under a source root in a stable recursive order."""
     for dirpath, _, filenames in os.walk(root):
         for name in sorted(filenames):
             yield os.path.join(dirpath, name)
 
 
 def main():
+    """Scan source folders and emit a manifest JSONL for downstream indexing."""
     ap = argparse.ArgumentParser(description="Build photo manifest from one or more source folders")
     ap.add_argument("sources", nargs="+", help="one or more photo source folders")
     ap.add_argument("-o", "--output", required=True, help="output JSONL path")

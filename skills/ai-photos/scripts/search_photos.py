@@ -10,6 +10,7 @@ from tidb_http_sql import run_query, load_target  # noqa: E402
 
 
 def run_db9(target, sql):
+    """Execute a search query against a db9 target and print the raw rows."""
     cmd = ["db9", "db", "sql", target, "-q", sql]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -19,15 +20,18 @@ def run_db9(target, sql):
 
 
 def run_tidb(target, sql):
+    """Execute a search query against a TiDB target and print the raw response."""
     t = load_target(target)
     print(run_query(t["host"], t["username"], t["password"], t["database"], sql))
 
 
 def esc(s):
+    """Escape single quotes for the simple SQL fragments used by this script."""
     return s.replace("'", "''")
 
 
 def main():
+    """Run a date, text, tag, or recent search against the indexed photo backend."""
     ap = argparse.ArgumentParser(description="Search photos in db9 or TiDB by date, text, tag, or recent import order")
     ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
     ap.add_argument("--backend", choices=["db9", "tidb"])

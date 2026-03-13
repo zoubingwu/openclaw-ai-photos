@@ -6,6 +6,7 @@ import urllib.request
 
 
 def derive_http_host(db_host: str) -> str:
+    """Convert a TiDB SQL host into the HTTP SQL endpoint used by this project."""
     db_host = db_host.strip()
     if db_host.startswith("http://") or db_host.startswith("https://"):
         return db_host.rstrip("/")
@@ -13,6 +14,7 @@ def derive_http_host(db_host: str) -> str:
 
 
 def run_query(host, username, password, database, query):
+    """Execute a SQL statement through the TiDB HTTP API."""
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
     req = urllib.request.Request(
         derive_http_host(host),
@@ -30,11 +32,13 @@ def run_query(host, username, password, database, query):
 
 
 def load_target(path):
+    """Load a TiDB target JSON file from disk."""
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def main():
+    """Run one SQL query against a TiDB HTTP target from the command line."""
     ap = argparse.ArgumentParser(description="Run SQL against TiDB HTTP SQL API")
     ap.add_argument("target", help="path to TiDB HTTP target JSON")
     ap.add_argument("--query", required=True)

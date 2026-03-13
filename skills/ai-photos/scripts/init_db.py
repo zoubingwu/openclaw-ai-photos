@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS photos (
 '''
 
 def run_db9(target, sql):
+    """Run schema SQL against a db9 database and return the raw CLI output."""
     cmd = ["db9", "--json", "db", "sql", target, "-q", sql]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -83,11 +84,13 @@ def run_db9(target, sql):
 
 
 def run_tidb(target, sql):
+    """Run schema SQL against a TiDB HTTP target and return the raw response."""
     t = load_target(target)
     return run_query(t["host"], t["username"], t["password"], t["database"], sql)
 
 
 def main():
+    """Initialize the photo schema for either db9 or TiDB."""
     ap = argparse.ArgumentParser(description="Initialize photo album schema for db9 or TiDB")
     ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
     ap.add_argument("--backend", choices=["db9", "tidb"])
