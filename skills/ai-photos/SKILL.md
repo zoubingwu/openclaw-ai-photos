@@ -89,6 +89,12 @@ Before indexing anything, verify:
 - the selected sources contain supported image files
 - `agents.defaults.imageModel` is vision-capable
 - image analysis actually works on a real image in the current OpenClaw runtime
+- `scripts/prepare_image.py` has at least one usable local image backend: macOS `sips`, Python `Pillow`, or ImageMagick
+
+If the image backend check fails:
+- first try to install `Pillow` in the current Python environment with `python3 -m pip install Pillow`
+- if that fails and a safe, known ImageMagick package path is available in the current environment, install ImageMagick instead
+- if installation is blocked by permissions, missing package tools, or network policy, tell the user exactly what is missing and stop
 
 If preflight fails:
 - tell the user setup is blocked in plain language
@@ -167,6 +173,8 @@ python3 scripts/import_records.py /tmp/photos.captioned.jsonl
 
 Rules:
 - keep captions short, factual, retrieval-oriented, and visually grounded
+- `prepare_image.py` prefers macOS `sips` when available and also supports Pillow or ImageMagick for Linux-friendly setups
+- if no supported image backend is available, prefer `python3 -m pip install Pillow` over distro-specific package manager commands
 - do not invent names, sensitive traits, or stories
 - do not replace the original `file_path` with the temporary derived image path
 - if there is nothing to caption, skip this step

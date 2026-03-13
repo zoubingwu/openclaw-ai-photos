@@ -9,6 +9,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+try:
+    from PIL import Image, ImageOps
+except Exception:
+    Image = None
+    ImageOps = None
+
 MODES = {
     "caption": {
         "max_edge": 1536,
@@ -35,15 +41,29 @@ def run(cmd):
     return proc.stdout
 
 
-def require_sips():
-    """Resolve the system sips binary or fail with a clear error."""
+def available_backends():
+    """Return the supported image backends in preference order."""
+    backends = []
     sips_bin = shutil.which("sips")
-    if not sips_bin:
-        raise RuntimeError("sips is required but was not found on this system")
-    return sips_bin
+    if sips_bin:
+        backends.append({"name": "sips", "identify_cmd": [sips_bin], "convert_cmd": [sips_bin]})
+    if Image is not None:
+        backends.append({"name": "pillow"})
+    magick_bin = shutil.which("magick")
+    if magick_bin:
+        backends.append({"name": "magick", "identify_cmd": [magick_bin, "identify"], "convert_cmd": [magick_bin]})
+    identify_bin = shutil.which("identify")
+    convert_bin = shutil.which("convert")
+    if not magick_bin and identify_bin and convert_bin:
+        backends.append({"name": "imagemagick", "identify_cmd": [identify_bin], "convert_cmd": [convert_bin]})
+    if not backends:
+        raise RuntimeError(
+            "no supported image backend found; install Pillow or ImageMagick on Linux, or run on macOS with sips"
+        )
+    return backends
 
 
-def read_dimensions(sips_bin, path):
+def read_dimensions_with_sips(sips_bin, path):
     """Read raster dimensions from an image file through sips."""
     out = run([sips_bin, "-g", "pixelWidth", "-g", "pixelHeight", str(path)])
     width_match = re.search(r"pixelWidth:\s*(\d+)", out)
@@ -51,6 +71,33 @@ def read_dimensions(sips_bin, path):
     if not width_match or not height_match:
         raise RuntimeError(f"could not read image dimensions: {path}")
     return int(width_match.group(1)), int(height_match.group(1))
+
+
+def read_dimensions_with_pillow(path):
+    """Read raster dimensions through Pillow."""
+    try:
+        with Image.open(path) as img:
+            return img.size
+    except Exception as e:
+        raise RuntimeError(f"could not read image dimensions: {path}: {e}") from e
+
+
+def read_dimensions_with_imagemagick(cmd, path):
+    """Read raster dimensions through ImageMagick."""
+    out = run([*cmd, "-format", "%w %h", str(path)]).strip()
+    parts = out.split()
+    if len(parts) != 2:
+        raise RuntimeError(f"could not read image dimensions: {path}")
+    return int(parts[0]), int(parts[1])
+
+
+def read_dimensions(backend, path):
+    """Read raster dimensions using the selected backend."""
+    if backend["name"] == "sips":
+        return read_dimensions_with_sips(backend["identify_cmd"][0], path)
+    if backend["name"] == "pillow":
+        return read_dimensions_with_pillow(path)
+    return read_dimensions_with_imagemagick(backend["identify_cmd"], path)
 
 
 def derive_output_path(path, mode):
@@ -63,31 +110,8 @@ def derive_output_path(path, mode):
     return out_dir / f"{digest}.{mode}.jpg"
 
 
-def prepare_image(path, mode):
-    """Return either the original path or a compressed JPEG derivative for the requested mode."""
-    spec = MODES[mode]
-    sips_bin = require_sips()
-    source = Path(path).expanduser().resolve()
-    if not source.is_file():
-        raise ValueError(f"image file not found: {source}")
-
-    width, height = read_dimensions(sips_bin, source)
-    longest_edge = max(width, height)
-    if longest_edge <= spec["passthrough_edge"]:
-        return {
-            "ok": True,
-            "used_original": True,
-            "input_path": str(source),
-            "output_path": str(source),
-            "mode": mode,
-            "width": width,
-            "height": height,
-            "max_edge": spec["max_edge"],
-            "passthrough_edge": spec["passthrough_edge"],
-            "quality": spec["quality"],
-        }
-
-    output = derive_output_path(source, mode)
+def write_jpeg_with_sips(sips_bin, source, output, spec):
+    """Create a resized JPEG derivative through sips."""
     run([
         sips_bin,
         "-s",
@@ -102,12 +126,82 @@ def prepare_image(path, mode):
         "--out",
         str(output),
     ])
-    out_width, out_height = read_dimensions(sips_bin, output)
+
+
+def pillow_resample():
+    """Return the best available Pillow resampling filter."""
+    return getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+
+
+def write_jpeg_with_pillow(source, output, spec):
+    """Create a resized JPEG derivative through Pillow."""
+    try:
+        with Image.open(source) as img:
+            if ImageOps and hasattr(ImageOps, "exif_transpose"):
+                img = ImageOps.exif_transpose(img)
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.thumbnail((spec["max_edge"], spec["max_edge"]), pillow_resample())
+            img.save(output, format="JPEG", quality=int(spec["quality"]))
+    except Exception as e:
+        raise RuntimeError(f"failed to prepare image with Pillow: {e}") from e
+
+
+def write_jpeg_with_imagemagick(cmd, source, output, spec):
+    """Create a resized JPEG derivative through ImageMagick."""
+    run([
+        *cmd,
+        str(source),
+        "-auto-orient",
+        "-strip",
+        "-resize",
+        f"{spec['max_edge']}x{spec['max_edge']}>",
+        "-quality",
+        spec["quality"],
+        str(output),
+    ])
+
+
+def write_jpeg(backend, source, output, spec):
+    """Create a JPEG derivative using the selected backend."""
+    if backend["name"] == "sips":
+        write_jpeg_with_sips(backend["convert_cmd"][0], source, output, spec)
+        return
+    if backend["name"] == "pillow":
+        write_jpeg_with_pillow(source, output, spec)
+        return
+    write_jpeg_with_imagemagick(backend["convert_cmd"], source, output, spec)
+
+
+def prepare_with_backend(source, mode, backend):
+    """Prepare one image with one concrete backend."""
+    spec = MODES[mode]
+    width, height = read_dimensions(backend, source)
+    longest_edge = max(width, height)
+    if longest_edge <= spec["passthrough_edge"]:
+        return {
+            "ok": True,
+            "used_original": True,
+            "input_path": str(source),
+            "output_path": str(source),
+            "backend": backend["name"],
+            "mode": mode,
+            "width": width,
+            "height": height,
+            "max_edge": spec["max_edge"],
+            "passthrough_edge": spec["passthrough_edge"],
+            "quality": spec["quality"],
+        }
+
+    output = derive_output_path(source, mode)
+    write_jpeg(backend, source, output, spec)
+    out_width, out_height = read_dimensions(backend, output)
     return {
         "ok": True,
         "used_original": False,
         "input_path": str(source),
         "output_path": str(output),
+        "backend": backend["name"],
         "mode": mode,
         "width": out_width,
         "height": out_height,
@@ -117,8 +211,23 @@ def prepare_image(path, mode):
     }
 
 
+def prepare_image(path, mode):
+    """Return either the original path or a compressed JPEG derivative for the requested mode."""
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"image file not found: {source}")
+
+    errors = []
+    for backend in available_backends():
+        try:
+            return prepare_with_backend(source, mode, backend)
+        except RuntimeError as e:
+            errors.append(f"{backend['name']}: {e}")
+    raise RuntimeError("could not prepare image with any supported backend: " + "; ".join(errors))
+
+
 def main():
-    """Prepare an image for captioning or preview delivery using macOS sips."""
+    """Prepare an image for captioning or preview delivery using any supported local image backend."""
     ap = argparse.ArgumentParser(description="Prepare a smaller temporary image for captioning or preview delivery")
     ap.add_argument("image", help="source image path")
     ap.add_argument("--mode", choices=sorted(MODES), required=True, help="derivation mode: caption or preview")
