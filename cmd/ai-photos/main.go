@@ -413,10 +413,10 @@ func runServe(args []string) error {
 	fs.SetOutput(os.Stderr)
 	var opts app.Options
 	fs.StringVar(&opts.ProfileRef, "profile", "", "Profile name or path. If omitted, the default profile is used.")
-	fs.StringVar(&opts.Host, "host", "127.0.0.1", "Listen host.")
+	fs.StringVar(&opts.Host, "host", "127.0.0.1", "Listen host. Default is 127.0.0.1 for local-only access.")
 	fs.IntVar(&opts.Port, "port", 0, "Listen port. Use 0 to pick a free local port.")
 	fs.StringVar(&opts.CacheDir, "cache-dir", "", "Cache directory for thumbnails and preview images.")
-	fs.BoolVar(&opts.OpenBrowser, "open-browser", false, "Open the local URL in the default browser after startup.")
+	fs.BoolVar(&opts.OpenBrowser, "open-browser", false, "Open the browser UI on this machine after startup.")
 	if wantsCommandHelp(args) {
 		printCommandHelp(os.Stdout, helpServe(), fs)
 		return nil
@@ -513,6 +513,7 @@ func printGlobalHelp(w io.Writer) {
 	fmt.Fprintln(w, "  - Automatic indexing is external to this CLI. Schedule `ai-photos sync` yourself if needed.")
 	fmt.Fprintln(w, "  - Image preparation uses local tools such as sips or ImageMagick when available.")
 	fmt.Fprintln(w, "  - db9 remains an external dependency when you choose the db9 backend.")
+	fmt.Fprintln(w, "  - `serve` listens on 127.0.0.1 by default. For access from another device, use `--host 0.0.0.0` and prefer Tailscale over exposing a public port.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands")
 	fmt.Fprintln(w, "  Album setup")
@@ -603,10 +604,10 @@ func printSubcommandHelp(w io.Writer, name string) error {
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 		fs.String("profile", "", "Profile name or path. If omitted, the default profile is used.")
-		fs.String("host", "127.0.0.1", "Listen host.")
+		fs.String("host", "127.0.0.1", "Listen host. Default is 127.0.0.1 for local-only access.")
 		fs.Int("port", 0, "Listen port. Use 0 to pick a free local port.")
 		fs.String("cache-dir", "", "Cache directory for thumbnails and preview images.")
-		fs.Bool("open-browser", false, "Open the local URL in the default browser after startup.")
+		fs.Bool("open-browser", false, "Open the browser UI on this machine after startup.")
 		printCommandHelp(w, helpServe(), fs)
 	case "version":
 		printCommandHelp(w, helpVersion(), nil)
@@ -915,9 +916,15 @@ func helpServe() commandHelp {
 			"Startup writes a single JSON object with `url`, `backend`, `profile_path`, `source`, and `cache_dir`.",
 			"The running server exposes health, search, detail, thumbnail, preview, and open-file endpoints.",
 		},
+		Notes: []string{
+			"`serve` listens on 127.0.0.1 by default, so it is local-only unless you explicitly set `--host`.",
+			"For access from another device, use `--host 0.0.0.0` and prefer reaching it over Tailscale instead of exposing a public port.",
+			"The open-file action opens the original file on the machine running `ai-photos`.",
+		},
 		Examples: []string{
 			"ai-photos serve",
 			"ai-photos serve --profile default",
+			"ai-photos serve --host 0.0.0.0 --port 8080",
 			"ai-photos serve --port 8080 --open-browser",
 		},
 	}

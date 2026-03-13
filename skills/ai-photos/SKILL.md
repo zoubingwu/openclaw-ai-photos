@@ -474,6 +474,13 @@ When the user asks to open a browser view for the album:
 3. wait for the JSON startup line and return the local URL to the user
 4. keep the process running while the user is browsing
 
+If the user wants to open the gallery from another device:
+- recommend Tailscale as the default remote access path
+- run `"$AI_PHOTOS_BIN" serve --host 0.0.0.0` only when they explicitly want remote access
+- explain that the startup JSON still prints a browser URL for the machine running `ai-photos`; for remote access, share the machine's Tailscale IP or MagicDNS name instead
+- do not recommend exposing the port directly to the public internet unless the user explicitly asks for that tradeoff
+- clarify that "open original" opens the file on the machine running `ai-photos`, not on the remote client
+
 Run:
 
 ```bash
@@ -490,7 +497,7 @@ The web service provides:
 - a local search page
 - search/filter/detail APIs for the page
 - thumbnail and preview endpoints
-- an action to open the original local file
+- an action to open the original local file on the machine running `ai-photos`
 
 When handing the web UI to the user:
 - describe the page in product terms, for example:
