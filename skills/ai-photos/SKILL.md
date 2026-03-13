@@ -1,88 +1,328 @@
 ---
 name: ai-photos
-description: Build and maintain a personal AI photo album from a local folder of images, using either db9 or TiDB Cloud Zero/Starter as the backend. Use when OpenClaw should guide the user through setup, initialize a photo database, recursively scan a photo folder, extract EXIF and hashes, generate captions with a vision-capable model, keep the index fresh during heartbeats, answer photo-search requests from the backend, and send matching images back to the user.
+description: |
+  Personal AI photo album for OpenClaw.
+
+  Use when users say:
+  - "index my photos"
+  - "set up an AI photo album"
+  - "search my photo library"
+  - "reconnect my photo album"
+  - "find photos of ..."
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # ai-photos
 
-Turn a normal image folder into a personal AI photo album backed by either db9 or TiDB.
+ai-photos turns a normal local folder into a searchable AI photo album for OpenClaw.
 
-This skill is for an end-to-end user experience, not just a technical pipeline. After installation, the agent should help the user:
-- choose a local folder as the photo library
-- choose or auto-select the backend
-- initialize the database and first import
-- enable automatic maintenance through heartbeats
-- search the library later by text, tags, dates, or caption-derived semantics
-- send matching images back to the user, not just text summaries
+This skill guides a normal OpenClaw user through folder selection, indexing, search, and ongoing sync.
 
-## Agent behavior
-
-Treat this as a guided setup-and-use skill.
-
-The agent should:
-- lead the user through first-time setup with short, concrete questions
-- prefer sensible defaults and keep the number of choices small
-- explain what it is doing in plain language
-- confirm when indexing is complete
-- teach the user how to search after setup
+When talking to end users:
+- say "photo library folder", "album", "indexing", and "auto sync"
+- keep prompts short and concrete
+- explain what is happening in plain language
 - send actual image results when the user asks for matches and local file access permits it
+- use ordinary folders only; system photo apps are out of scope for now
 
-The agent should not:
-- dump raw SQL unless the user explicitly asks
-- leave the album in a manual-only state without warning the user
+Do not:
+- start with SQL, JSONL, or backend internals
 - silently choose a non-working image model
-- assume macOS Photos integration; use ordinary folders for now
+- leave the album in a manual-only state without warning the user
+- say setup is complete before search has been verified
 
-## Happy-path conversation flow
+---
 
-When the user installs this skill and wants to start using it, follow this flow.
+## Trigger phrases
 
-### 1. Ask for the photo library folder
+Use this skill when the user wants OpenClaw to set up, maintain, reconnect, or search a personal photo album.
 
-First ask the user to choose a local folder that will act as the photo library.
+Common triggers include:
+- "index my photos"
+- "build a photo album"
+- "search my pictures"
+- "find beach photos"
+- "show my recent photos"
+- "reconnect my photo album"
+
+---
+
+## When to use this skill
+
+Use this skill when:
+- the user wants to index a local photo folder into a searchable album
+- the user wants natural-language, date, or tag search over their photos
+- the user wants OpenClaw to keep the album fresh automatically
+- the user wants matching image files returned during search
+- the user wants to reconnect an existing album backend
+
+---
+
+## Out of scope
+
+- one-off image captioning for a single image
+- system photo app integrations
+- raw SQL debugging as the main task
+
+---
+
+## What the user gets
+
+- first-time indexing from a normal local folder
+- searchable captions, tags, scene labels, objects, and visible text
+- text, tag, date, and recent-photo search
+- automatic incremental maintenance through heartbeat or an equivalent periodic trigger
+- actual image files returned during search when possible
+
+---
+
+## Definition of Done
+
+This task is NOT complete until all of the following are true:
+
+1. the photo library folder is chosen and readable
+2. image analysis is verified to work in the current OpenClaw runtime
+3. the album backend is created or reconnected and writable
+4. the initial import succeeds, or an existing album is verified reachable
+5. automatic maintenance is configured
+6. a real search is verified against the indexed backend
+7. the user has been sent the full Step 7 handoff message
+
+---
+
+## Common failure modes
+
+Agents often make one of these mistakes:
+- indexing before verifying that the image model actually works
+- finishing the first import but forgetting to enable automatic maintenance
+- leading with backend setup details and losing the user onboarding flow
+- saying setup is done without verifying search on the indexed backend
+
+Treat the final handoff and the first verified search as required setup steps.
+
+---
+
+## Terminology
+
+Use this distinction consistently:
+
+| Internal term | User-facing explanation |
+|---------------|-------------------------|
+| photo library folder | the local folder that will be indexed recursively |
+| album backend | where the searchable photo index is stored |
+| album profile | the local saved setup information needed to reconnect later |
+| manifest JSONL | internal ingestion file used during implementation and debugging |
+| captioned JSONL | internal import file used during implementation and debugging |
+
+Preferred wording:
+- use "photo library folder" for the user's local image root
+- use "album backend" for the searchable storage target
+- use "auto sync" for periodic maintenance in normal conversation
+
+If the user asks "What do I need to save for later?" answer plainly:
+
+> Save the album profile details and backend connection details needed to reconnect this same album later.
+
+---
+
+## Onboarding
+
+### Step 0 - Choose the setup mode
+
+`[AGENT]` Ask the user before doing anything else:
+
+> Which setup do you want?
+> 1. Create a new photo album
+> 2. Reconnect an existing photo album
+> 3. Search an already configured album
+>
+> If you choose reconnect, send the saved album profile or the backend details you used before.
+
+Branching:
+- if the user chooses `1`, continue to Step 1
+- if the user chooses `2`, verify the saved backend is reachable, then continue to Step 5 or Step 6 as appropriate
+- if the user chooses `3`, use the existing album backend and go directly to the user search flow
+- if the user wants search but no configured album exists, tell them setup is required first
+
+### Step 1 - Ask for the photo library folder
+
+First ask the user for one local folder path.
 
 Good prompt style:
-- ask for one folder path
+- ask for exactly one folder path
 - explain that the skill will index that folder recursively
-- make it clear that ordinary folders are supported and system photo apps are out of scope for now
+- make it clear that ordinary folders are supported and system photo apps are out of scope
 
 Do not continue setup until the user has provided a folder.
 
-### 2. Validate the vision model first
+### Step 2 - Run preflight checks
 
-Before indexing anything, verify that image analysis actually works in the current OpenClaw runtime.
+Before indexing anything, verify all of the following:
+- the folder exists and is readable
+- the folder contains supported image files
+- `agents.defaults.imageModel` points to a vision-capable model
+- image analysis actually works in the current OpenClaw runtime
 
-Requirements:
-- `agents.defaults.imageModel` must point to a vision-capable model
-- do not trust the model name alone; test with a real image if needed
+Do not trust the model name alone; test with a real image if needed.
 
-If image analysis is not working:
+If preflight fails:
 - tell the user setup is blocked
-- explain that the image model must be fixed first
-- do not proceed with indexing fake or filename-derived captions
+- explain exactly what must be fixed
+- do not proceed with fake captions or filename-derived descriptions
 
-### 3. Choose the backend
+### Step 3 - Choose the backend
 
 Prefer this backend decision rule:
 - if `db9` CLI is installed and usable, prefer `db9`
 - otherwise fall back to `TiDB Cloud Zero`
+
+If the user is reconnecting an existing album, keep the same backend so the same album stays intact.
 
 When using TiDB Zero:
 - remind the user that Zero is temporary
 - explicitly tell the user they should claim it if they want to keep the database
 - preserve enough local config to reconnect later
 
-## Backend choices
+### Step 4 - Create or reconnect the album backend
+
+Create or reconnect the backend before running the first import.
+
+For reconnect:
+- verify the backend is reachable
+- verify the target album can be searched or written
+- if the saved configuration is incomplete, ask only for the missing backend details
+
+For a new album:
+- create the backend
+- save the album profile details needed for future reconnect
+
+Do not move on until the backend is confirmed reachable.
+
+### Step 5 - Run the first indexing pass
+
+Use this flow for a new album:
+
+1. scan the photo library and build the manifest
+2. generate short factual captions and retrieval tags with a vision-capable model
+3. import the records into the backend
+
+Caption rules:
+- short
+- factual
+- retrieval-oriented
+- visually grounded
+
+Avoid:
+- naming unknown people
+- inferring sensitive traits
+- speculative storytelling
+- filename-based fake descriptions
+
+Read `references/caption-schema.md` before generating records.
+
+### Step 6 - Enable automatic maintenance
+
+Automatic maintenance is the default operating mode after setup.
+
+Do not consider setup complete until one of these is true:
+- heartbeat is configured to maintain the album
+- another periodic trigger is configured to run the same incremental flow
+
+If neither is configured, tell the user setup is incomplete.
+
+### Step 7 - Final handoff
+
+`[AGENT]` After successful setup, the agent MUST send the following structured handoff before ending the task.
+Translate the content into the user's language before sending.
+
+```text
+Your AI photo album is ready.
+
+WHAT IS SET UP
+- Photo library folder: <folder>
+- Album backend: <db9 or tidb>
+- Auto sync: <enabled trigger>
+
+HOW TO SEARCH
+- "find cats on the sofa"
+- "show photos from 2026-03"
+- "find photos tagged beach"
+- "show my most recent photos"
+
+RECOVERY
+- Save the album profile and backend details needed to reconnect this album later.
+- If this album uses TiDB Zero, claim it if you want to keep it.
+
+WHAT HAPPENS NEXT
+- New or changed photos will be picked up by auto sync.
+- I can search the album for you any time and send matching images back.
+```
+
+Do not end setup without sending the handoff.
+
+Immediately after setup:
+- verify search with a real query against the indexed backend
+- if the result is clear, summarize it and send the top matching image or images
+
+---
+
+## User search flow
+
+When the user asks to find photos, use the indexed backend as the search source.
+
+Use the fixed search script for common queries.
+
+### db9 path
+
+```bash
+python3 scripts/search_photos.py <db> --backend db9 --text "cat on sofa"
+python3 scripts/search_photos.py <db> --backend db9 --tag cat
+python3 scripts/search_photos.py <db> --backend db9 --date 2026-03
+python3 scripts/search_photos.py <db> --backend db9 --recent
+```
+
+### TiDB path
+
+```bash
+python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --text "cat on sofa"
+python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --tag cat
+python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --date 2026-03
+python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --recent
+```
+
+### How the agent should answer search requests
+
+When responding to the user:
+- summarize the matching photos clearly
+- mention filenames, dates, or captions when useful
+- do not dump raw SQL unless explicitly requested
+- if the user wants the photo itself, send the matching image file back
+
+Preferred interaction style:
+- if there is one clear match, send that image directly with a short explanation
+- if there are multiple strong matches, summarize them first and send the top 1-3 images
+- if results are weak or ambiguous, say so and suggest a better query
+
+This skill should present as an AI photo librarian.
+
+---
+
+## Backend notes
 
 ### db9
 
-Prefer db9 when available because it fits this skill especially well:
+Prefer db9 when available because it fits this skill well:
 - database-per-user model
 - OpenClaw-friendly CLI flow
 - Postgres + JSONB + vector + full-text search
 - simple operational model for a personal AI album
+
+Credential handling:
+- `db9` account auth for the CLI is usually enough
+- `db9 login`, `db9 claim`, or `db9 login --api-key ...` stores auth in `~/.db9/credentials`
+- scripts identify the target database by database name or id
+- the skill normally does not need to copy raw Postgres passwords into extra files
 
 ### TiDB Cloud Zero / Starter
 
@@ -93,35 +333,13 @@ Good fit:
 - longer-lived backend after claim to Starter
 - HTTP SQL API path without requiring a local MySQL CLI
 
-Important caveat for TiDB:
+Important caveats:
 - TiDB auto embedding is mainly for text
-- do not assume it directly generates embeddings from raw image files
-- for image retrieval, use caption text or external image embeddings
+- use caption text or external image embeddings for image retrieval
 
-## Credential handling
-
-Be explicit about backend credentials.
-
-### db9 credentials
-
-There are two db9 credential layers:
-- `db9` account auth for the CLI
-- direct database connection details for external tools
-
-For this skill's scripts, only the CLI auth is normally required.
-
-Default behavior:
-- `db9 login`, `db9 claim`, or `db9 login --api-key ...` stores auth in `~/.db9/credentials`
-- scripts identify the target database by database name or id
-- the skill does not need to copy raw Postgres passwords into extra files for routine use
-
-### TiDB credentials
-
-For TiDB Zero or Starter, prefer one of these:
-- HTTP SQL API credentials
-- MySQL-compatible connection details when already available
-
-Preferred practical rule:
+Credential handling:
+- prefer HTTP SQL API credentials
+- use MySQL-compatible connection details only when already available
 - if no local MySQL client is available, use the HTTP SQL API
 - avoid copying passwords into shell history or plaintext config files outside the skill's working config
 
@@ -133,11 +351,13 @@ For TiDB Zero specifically, preserve enough local config to reconnect:
 - claim URL
 - expiration time
 
-If the backend is TiDB Zero, remind the user that setup is not truly durable until they claim it.
+If the backend is TiDB Zero, remind the user that long-term durability starts after they claim it.
 
-## Initialization flow
+---
 
-Use this flow the first time the user sets up the album.
+## Initialization commands
+
+Use these commands after the user-facing onboarding steps above.
 
 ### 1. Create the backend database
 
@@ -149,8 +369,6 @@ python3 scripts/init_db.py <db> --backend db9
 ```
 
 #### TiDB path
-
-Initialize the chosen TiDB database:
 
 ```bash
 python3 scripts/init_db.py /path/to/tidb-target.json --backend tidb
@@ -187,9 +405,7 @@ The manifest includes:
 - taken-at timestamp when available
 - raw EXIF JSON
 
-### 3. Generate initial captions with a vision-capable model
-
-Read `references/caption-schema.md` before generating records.
+### 3. Generate initial captions
 
 For each manifest record:
 - inspect the image with a vision-capable model
@@ -201,18 +417,6 @@ For each manifest record:
   - `objects`
   - `text_in_image`
 - write one JSON object per line into a captioned JSONL file
-
-Caption style requirements:
-- short
-- factual
-- retrieval-oriented
-- visually grounded
-
-Avoid:
-- naming unknown people
-- inferring sensitive traits
-- speculative storytelling
-- filename-based fake descriptions
 
 ### 4. Import the initial records
 
@@ -228,48 +432,26 @@ python3 scripts/import_records.py <db> /tmp/photos.captioned.jsonl --backend db9
 python3 scripts/import_records.py /path/to/tidb-target.json /tmp/photos.captioned.jsonl --backend tidb
 ```
 
-### 5. Tell the user setup is complete
-
-After the first import succeeds, send a short completion message.
-
-The agent should tell the user:
-- the album is indexed
-- future updates will be maintained automatically via heartbeat
-- they can now search by examples such as:
-  - keyword or natural language, for example `找弹吉他的` or `find cats on the sofa`
-  - date, for example `2026-03`
-  - tags, for example `cat`, `mountain`, `beach`
-
-Do not end setup without telling the user that the album is now usable.
+---
 
 ## Heartbeat maintenance flow
 
-Heartbeat-driven maintenance is the default operating mode after initialization.
-
-Do not consider setup complete until one of these is true:
-- heartbeat is configured to maintain the album
-- another periodic trigger is configured to run the same incremental flow
-
-If neither is configured, tell the user setup is incomplete.
-
-### Heartbeat behavior
-
 When a heartbeat arrives for a configured album:
 
-1. Run incremental sync:
+1. run incremental sync:
 
 ```bash
 python3 scripts/sync_photos.py <target> <photo-folder> --backend <db9|tidb>
 ```
 
-2. Read the JSON output.
-3. If `to_caption` is `0`, return `HEARTBEAT_OK`.
-4. If `to_caption` is greater than `0`:
+2. read the JSON output
+3. if `to_caption` is `0`, return `HEARTBEAT_OK`
+4. if `to_caption` is greater than `0`:
    - read `incremental_manifest_jsonl`
    - caption only those new or changed records with a vision-capable model
    - write a captioned JSONL file
    - import it with `import_records.py`
-5. Stay quiet unless:
+5. stay quiet unless:
    - indexing failed
    - user attention is needed
    - the user explicitly asked for progress updates
@@ -283,44 +465,7 @@ Incrementality is determined by:
 If both match an existing record, skip the image.
 If either differs, treat it as new or changed and reprocess it.
 
-## User search flow
-
-When the user asks to find photos, search the indexed backend instead of reprocessing the library.
-
-Use the fixed search script for common queries.
-
-### db9 path
-
-```bash
-python3 scripts/search_photos.py <db> --backend db9 --text "cat on sofa"
-python3 scripts/search_photos.py <db> --backend db9 --tag cat
-python3 scripts/search_photos.py <db> --backend db9 --date 2026-03
-python3 scripts/search_photos.py <db> --backend db9 --recent
-```
-
-### TiDB path
-
-```bash
-python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --text "cat on sofa"
-python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --tag cat
-python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --date 2026-03
-python3 scripts/search_photos.py /path/to/tidb-target.json --backend tidb --recent
-```
-
-### How the agent should answer search requests
-
-When responding to the user:
-- summarize the matching photos clearly
-- mention filenames, dates, or captions when useful
-- do not dump raw SQL unless explicitly requested
-- if the user wants the photo itself, send the matching image file back, not just text
-
-Preferred interaction style:
-- if there is one clear match, send that image directly with a short explanation
-- if there are multiple strong matches, summarize them first and send the top 1-3 images
-- if results are weak or ambiguous, say so and suggest a better query
-
-This skill should feel like an AI photo librarian, not a SQL wrapper.
+---
 
 ## Scripts
 
@@ -346,14 +491,18 @@ Run the incremental sync entrypoint for heartbeat-driven indexing.
 ### `scripts/tidb_http_sql.py`
 Run SQL through the TiDB HTTP SQL API when a local MySQL client is unavailable.
 
+---
+
 ## Reference files
 
 ### `references/caption-schema.md`
 Read this before generating the captioned JSONL. It defines the expected output shape for the vision step.
 
+---
+
 ## Notes on search
 
-This skill fixes the ingestion path first. It does not assume db9 has built-in image embedding generation, and it does not assume TiDB can directly embed raw image files.
+This base workflow uses structured image understanding plus text retrieval fields. Search quality comes from captions, tags, scene labels, objects, and visible text.
 
 For the first usable album, search works well enough via:
 - caption text
