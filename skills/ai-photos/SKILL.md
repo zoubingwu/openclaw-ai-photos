@@ -10,7 +10,7 @@ description: |
   - "reconnect my photo album"
   - "find photos of ..."
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # ai-photos
@@ -32,8 +32,8 @@ This task is not complete until all of the following are true:
 2. image analysis is verified to work in the current OpenClaw runtime
 3. the album backend is created or reconnected and writable
 4. the first import succeeds, or an existing album is verified reachable
-5. the user explicitly approved auto sync or explicitly declined it
-6. if auto sync was approved, OpenClaw heartbeat is configured, `HEARTBEAT.md` is written, and one verification heartbeat has run
+5. the user explicitly approved automatic indexing or explicitly declined it
+6. if automatic indexing was approved, OpenClaw heartbeat is configured without breaking existing heartbeat tasks, the ai-photos block is present in `HEARTBEAT.md`, and one verification heartbeat has run
 7. a real search is verified against the indexed backend
 8. the user has been sent the final handoff
 
@@ -170,55 +170,70 @@ Rules:
 - do not replace the original `file_path` with the temporary derived image path
 - if there is nothing to caption, skip this step
 
-### Step 6 - Enable auto sync
+### Step 6 - Enable automatic indexing
 
 User-facing:
 
-- Offer automatic updates in plain language.
-- Explain that OpenClaw can periodically check the selected folders for new or changed photos and update the album.
+- Offer automatic indexing in plain language.
+- Explain that OpenClaw can periodically check the selected folders for new or changed photos and update the album index.
 - Ask whether the user wants to enable that now.
 
 `[AGENT]`
 
-If the user says yes, run:
+If the user declines:
+- skip this step
+- do not change heartbeat config
+- do not change `HEARTBEAT.md`
 
-```bash
-openclaw config set agents.defaults.heartbeat.every "30m"
-openclaw config set agents.defaults.heartbeat.target "last"
-openclaw config set agents.defaults.heartbeat.lightContext true --strict-json
-openclaw config validate
-openclaw config get agents.defaults.workspace
-```
+If the user says yes:
+- inspect the existing heartbeat config before changing anything
+- do not overwrite or replace existing heartbeat tasks
+- do not tell the user to manually restart Gateway for heartbeat-only changes
+- let OpenClaw handle heartbeat configuration using its normal mechanisms unless debugging requires lower-level manual steps
+- reuse the existing heartbeat scope and workspace whenever possible
+- if there is more than one reasonable heartbeat-enabled scope, do not guess; ask the user which one should own ai-photos automatic indexing
+- do not convert an existing per-agent heartbeat setup back into a defaults-based setup
+- preserve existing heartbeat behavior unless a missing setting must be filled with a reasonable default
+- do not spell out or rely on a fixed command recipe unless the current environment requires debugging
 
-Then create or update `<workspace>/HEARTBEAT.md` with:
+Then update `<workspace>/HEARTBEAT.md` without removing unrelated content:
+- if the file does not exist, create it
+- if the file exists, preserve all existing user content
+- manage only one ai-photos block delimited by stable markers
+- if the ai-photos block already exists, replace only that block
+- if the ai-photos block does not exist, append it to the end of the file
 
 ```md
-# ai-photos heartbeat
+<!-- ai-photos:auto-indexing:start -->
+## ai-photos automatic indexing
 
-- Run `python3 <absolute-path-to-ai-photos>/scripts/sync_photos.py`.
-- If `to_caption` is `0`, reply `HEARTBEAT_OK`.
+- Read and learn how to use `ai-photos` skill
+- Use `python3 <absolute-path-to-ai-photos>/scripts/sync_photos.py` to scan the configured photo folders for changes.
+- Check the configured photo folders for changes and keep the album index up to date.
+- If `to_caption` is `0`, it means nothing needs attention, reply `HEARTBEAT_OK`.
 - If `to_caption` is greater than `0`, run the shared record ingestion flow using `incremental_manifest_jsonl`.
-- Stay quiet unless indexing failed or user attention is needed.
+- Stay quiet unless indexing failed or user action is needed.
+<!-- ai-photos:auto-indexing:end -->
 ```
+
+Do not rewrite the whole file just to add this block.
 
 Then verify once:
-
-```bash
-openclaw system event --text "Run ai-photos heartbeat now" --mode now
-openclaw system heartbeat last
-```
+- trigger one heartbeat run if it is safe and practical in the current environment, otherwise wait for the next scheduled run
+- check the heartbeat result and make sure the ai-photos task completed as intended
+- do not claim success until the verification result is clear
 
 Then tell the user the result:
-- success: explain that automatic updates are active and the verification run succeeded
-- declined: explain that the album is ready, but future changes require a manual update
-- failed: explain that the album is usable, but automatic updates are not active yet
+- success: explain that automatic indexing is active and the verification run succeeded
+- declined: explain that the album is ready, but future changes require a manual re-index
+- failed: explain that the album is usable, but automatic indexing is not active yet
 
 ### Step 7 - Final handoff
 
 User-facing handoff should include:
 - connected photo folders
 - what the user can now do in OpenClaw
-- automatic update status
+- automatic indexing status
 - 3 or 4 example searches
 - a cloud claim reminder if the chosen storage needs it
 
@@ -229,7 +244,7 @@ Do not proactively include backend names, profile paths, JSONL files, or other i
 Immediately after setup:
 - verify one real search against the indexed backend
 - if the result is clear, summarize it and send the top matching image or images
-- if the user declined auto sync, say clearly that the album is in manual-only mode
+- if the user declined automatic indexing, say clearly that the album is in manual-only indexing mode
 
 ## Search flow
 
