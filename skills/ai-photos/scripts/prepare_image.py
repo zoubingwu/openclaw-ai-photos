@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import platform
 import re
 import shutil
 import subprocess
@@ -27,6 +28,8 @@ MODES = {
         "quality": "80",
     },
 }
+
+DIRECT_CAPTION_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def run(cmd):
@@ -56,10 +59,6 @@ def available_backends():
     convert_bin = shutil.which("convert")
     if not magick_bin and identify_bin and convert_bin:
         backends.append({"name": "imagemagick", "identify_cmd": [identify_bin], "convert_cmd": [convert_bin]})
-    if not backends:
-        raise RuntimeError(
-            "no supported image backend found; install Pillow or ImageMagick on Linux, or run on macOS with sips"
-        )
     return backends
 
 
@@ -211,18 +210,61 @@ def prepare_with_backend(source, mode, backend):
     }
 
 
+def can_fallback_to_original(source, mode):
+    """Allow caption mode to use the original file for formats the model can consume directly."""
+    return mode == "caption" and source.suffix.lower() in DIRECT_CAPTION_EXTS
+
+
+def build_original_fallback_result(source, mode, reason):
+    """Return a successful direct-file fallback when no local image backend is available."""
+    spec = MODES[mode]
+    return {
+        "ok": True,
+        "used_original": True,
+        "input_path": str(source),
+        "output_path": str(source),
+        "backend": "direct",
+        "mode": mode,
+        "width": None,
+        "height": None,
+        "max_edge": spec["max_edge"],
+        "passthrough_edge": spec["passthrough_edge"],
+        "quality": spec["quality"],
+        "degraded": True,
+        "warning": reason,
+        "platform": platform.system(),
+    }
+
+
 def prepare_image(path, mode):
     """Return either the original path or a compressed JPEG derivative for the requested mode."""
     source = Path(path).expanduser().resolve()
     if not source.is_file():
         raise ValueError(f"image file not found: {source}")
 
+    backends = available_backends()
     errors = []
-    for backend in available_backends():
+    for backend in backends:
         try:
             return prepare_with_backend(source, mode, backend)
         except RuntimeError as e:
             errors.append(f"{backend['name']}: {e}")
+    if can_fallback_to_original(source, mode):
+        if not backends:
+            return build_original_fallback_result(
+                source,
+                mode,
+                "no local image backend found; using the original file path for captioning",
+            )
+        return build_original_fallback_result(
+            source,
+            mode,
+            "all local image backends failed; using the original file path for captioning",
+        )
+    if not backends:
+        raise RuntimeError(
+            "no supported image backend found; install Pillow or ImageMagick on Linux, or run on macOS with sips"
+        )
     raise RuntimeError("could not prepare image with any supported backend: " + "; ".join(errors))
 
 

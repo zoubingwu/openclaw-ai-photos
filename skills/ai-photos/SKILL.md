@@ -17,6 +17,11 @@ metadata:
 
 ai-photos turns one or more local photo sources into a searchable AI photo album for OpenClaw.
 
+Supported formats:
+- macOS: `jpg`, `jpeg`, `png`, `webp`, `heic`
+- Linux: `jpg`, `jpeg`, `png`, `webp`
+- Linux `heic`: best-effort only; do not promise captioning or preview support
+
 When talking to users:
 - try to match the user's language
 - explain the outcome simply: choose local folders now, then use OpenClaw to search and organize them
@@ -89,12 +94,13 @@ Before indexing anything, verify:
 - the selected sources contain supported image files
 - `agents.defaults.imageModel` is vision-capable
 - image analysis actually works on a real image in the current OpenClaw runtime
-- `scripts/prepare_image.py` has at least one usable local image backend: macOS `sips`, Python `Pillow`, or ImageMagick
+- whether `scripts/prepare_image.py` has a usable local image backend: macOS `sips`, Python `Pillow`, or ImageMagick
 
 If the image backend check fails:
-- first try to install `Pillow` in the current Python environment with `python3 -m pip install Pillow`
-- if that fails and a safe, known ImageMagick package path is available in the current environment, install ImageMagick instead
-- if installation is blocked by permissions, missing package tools, or network policy, tell the user exactly what is missing and stop
+- on macOS, treat this as blocking because `heic` and local preview preparation depend on `sips`
+- on Linux, do not block setup for `jpg`, `jpeg`, `png`, or `webp`; OpenClaw can still caption those files directly from the original path
+- on Linux, explain that preview preparation and large-image downscaling are reduced without a local backend
+- only suggest installing `Pillow` or ImageMagick when the user wants better local image preparation or troubleshooting requires it
 
 If preflight fails:
 - tell the user setup is blocked in plain language
@@ -174,9 +180,12 @@ python3 scripts/import_records.py /tmp/photos.captioned.jsonl
 Rules:
 - keep captions short, factual, retrieval-oriented, and visually grounded
 - `prepare_image.py` prefers macOS `sips` when available and also supports Pillow or ImageMagick for Linux-friendly setups
-- if no supported image backend is available, prefer `python3 -m pip install Pillow` over distro-specific package manager commands
+- if `prepare_image.py` returns the original file path in caption mode, continue with that file instead of blocking the batch
+- on Linux, allow direct caption fallback for `jpg`, `jpeg`, `png`, and `webp` when no local image backend is available
+- do not promise Linux `heic` captioning or preview support
 - do not invent names, sensitive traits, or stories
 - do not replace the original `file_path` with the temporary derived image path
+- if one file still cannot be captioned, skip only that file and continue the rest of the batch
 - if there is nothing to caption, skip this step
 
 ### Step 6 - Enable automatic indexing
@@ -273,6 +282,7 @@ When answering:
 - answer at the product level unless the user asks for implementation details
 - before sending an image file, run `python3 scripts/prepare_image.py --mode preview <matched-file>`
 - send the returned `output_path` when possible
+- if preview preparation fails on Linux without a local image backend, say so briefly and fall back to the original file only when it is safe to send as-is
 - if results are weak, say so and suggest a better query
 
 ## Heartbeat run behavior
