@@ -64,9 +64,6 @@
         }
       }
 
-      .photo-card {
-        animation: fadeIn 0.35s ease-out forwards;
-      }
     </style>
   </head>
   <body class="bg-white text-apple-darkText h-screen flex overflow-hidden antialiased selection:bg-apple-blue selection:text-white">
@@ -82,35 +79,10 @@
           </svg>
           Library
         </a>
-        <a href="#" class="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-200/50 transition-colors">
-          <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-8 4h.01M12 8v4"></path>
-          </svg>
-          Local status
-        </a>
       </nav>
-
-      <div class="p-4">
-        <div class="rounded-2xl bg-white/70 border border-gray-200 px-4 py-4 shadow-sm">
-          <div class="flex items-center justify-between">
-            <p class="text-xs uppercase tracking-[0.2em] text-gray-400">Service</p>
-            <span id="healthBadge" class="rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600">Checking</span>
-          </div>
-          <dl class="mt-4 space-y-3 text-sm">
-            <div class="flex items-center justify-between gap-3">
-              <dt class="text-gray-500">Backend</dt>
-              <dd id="backendValue" class="font-medium text-gray-900">-</dd>
-            </div>
-            <div class="flex items-center justify-between gap-3">
-              <dt class="text-gray-500">Source</dt>
-              <dd id="sourceValue" class="font-medium text-gray-900">-</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
     </aside>
 
-    <main class="flex-1 flex flex-col relative h-full">
+    <main class="flex-1 min-h-0 flex flex-col relative h-full">
       <header class="sticky top-0 z-10 bg-white/70 backdrop-blur-md border-b border-gray-100 px-4 py-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div class="md:hidden w-full flex justify-between items-center">
           <h1 class="text-xl font-bold tracking-tight">Photos</h1>
@@ -132,35 +104,26 @@
           </div>
 
           <div class="flex items-center gap-2 w-full sm:w-auto overflow-x-auto no-scrollbar">
-            <select id="yearFilter" class="bg-gray-100 text-sm rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-apple-blue text-gray-700 font-medium cursor-pointer outline-none">
+            <select id="yearFilter" class="bg-gray-100 text-sm rounded-lg px-3 py-1.5 border-none text-gray-700 font-medium cursor-pointer outline-none focus:outline-none focus:ring-0 focus:shadow-none focus:bg-white">
               <option value="">All years</option>
               <option value="2026">2026</option>
               <option value="2025">2025</option>
               <option value="2024">2024</option>
               <option value="2023">2023</option>
             </select>
-            <input id="tagFilter" type="text" placeholder="Tag, for example cat" class="bg-gray-100 text-sm rounded-lg px-3 py-1.5 border-none focus:ring-2 focus:ring-apple-blue text-gray-700 font-medium outline-none min-w-44" />
-            <label class="inline-flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700">
-              <input id="recentToggle" type="checkbox" class="rounded border-gray-300 text-apple-blue focus:ring-apple-blue" />
-              Recent imports
-            </label>
           </div>
         </form>
       </header>
 
-      <div class="px-6 py-4 flex items-center justify-between gap-4 text-sm text-gray-500">
+      <div class="px-6 py-4 text-sm text-gray-500">
         <div id="resultCount">Loading library...</div>
-        <div class="flex items-center gap-3">
-          <span id="pageIndicator" class="text-xs uppercase tracking-[0.2em] text-gray-400">WINDOWED LIST</span>
-          <span id="loadState" class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">Idle</span>
-        </div>
       </div>
 
       <div class="px-6 -mt-2 pb-2">
         <div id="errorBanner" class="hidden rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600"></div>
       </div>
 
-      <div id="scrollViewport" class="flex-1 overflow-y-auto px-4 sm:px-6 pb-20">
+      <div id="scrollViewport" class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-20">
         <div id="topSpacer" style="height: 0;"></div>
         <div id="photoGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 sm:gap-4"></div>
         <div id="bottomSpacer" style="height: 0;"></div>
@@ -171,12 +134,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
           </svg>
           <h3 class="text-lg font-medium text-gray-900">No matching photos</h3>
-          <p class="text-gray-500 mt-1 text-sm">Try a shorter search, a year filter, or switch to recent imports.</p>
+          <p class="text-gray-500 mt-1 text-sm">Try a shorter search or a year filter.</p>
         </div>
       </div>
     </main>
 
-    <div id="lightbox" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg hidden flex-col transition-opacity duration-300 opacity-0">
+    <div id="lightbox" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg hidden flex flex-col min-h-0 transition-opacity duration-300 opacity-0">
       <div class="flex justify-between items-center p-4 text-white z-10">
         <button id="closeLightbox" class="p-2 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur transition">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,12 +153,12 @@
         </button>
       </div>
 
-      <div class="flex-1 flex overflow-hidden relative">
-        <div class="flex-1 flex items-center justify-center p-4">
-          <img id="lightboxImg" src="" alt="" class="max-w-full max-h-full object-contain drop-shadow-2xl rounded-sm" />
+      <div class="flex-1 min-h-0 flex overflow-hidden relative">
+        <div class="flex-1 min-w-0 min-h-0 flex items-center justify-center p-4 sm:p-6">
+          <img id="lightboxImg" src="" alt="" class="block w-auto h-auto max-w-full max-h-full object-contain drop-shadow-2xl rounded-sm" />
         </div>
 
-        <div id="infoPanel" class="w-80 bg-white/10 backdrop-blur-xl border-l border-white/10 text-white p-6 hidden flex-col gap-6 overflow-y-auto">
+        <div id="infoPanel" class="w-80 max-w-full min-h-0 bg-white/10 backdrop-blur-xl border-l border-white/10 text-white p-6 hidden flex-col gap-6 overflow-y-auto">
           <div>
             <h2 id="infoTitle" class="text-xl font-semibold mb-1">Photo title</h2>
             <p id="infoDate" class="text-gray-300 text-sm">-</p>
@@ -253,6 +216,10 @@
           gap: 16,
           itemHeight: 220,
           overscanRows: 3,
+          renderedStartRow: -1,
+          renderedEndRow: -1,
+          renderedTotalRows: -1,
+          renderedColumns: -1,
         },
       };
 
@@ -262,18 +229,10 @@
       const photoGrid = document.getElementById('photoGrid');
       const searchInput = document.getElementById('searchInput');
       const yearFilter = document.getElementById('yearFilter');
-      const tagFilter = document.getElementById('tagFilter');
-      const recentToggle = document.getElementById('recentToggle');
       const resultCount = document.getElementById('resultCount');
       const emptyState = document.getElementById('emptyState');
       const errorBanner = document.getElementById('errorBanner');
-      const pageIndicator = document.getElementById('pageIndicator');
-      const loadState = document.getElementById('loadState');
       const scrollHint = document.getElementById('scrollHint');
-      const healthBadge = document.getElementById('healthBadge');
-      const backendValue = document.getElementById('backendValue');
-      const sourceValue = document.getElementById('sourceValue');
-
       const lightbox = document.getElementById('lightbox');
       const lightboxImg = document.getElementById('lightboxImg');
       const closeLightbox = document.getElementById('closeLightbox');
@@ -299,21 +258,6 @@
       yearFilter.addEventListener('change', () => {
         runSearch(true);
       });
-      tagFilter.addEventListener('input', debounce(() => {
-        runSearch(true);
-      }, 220));
-      recentToggle.addEventListener('change', () => {
-        const disabled = recentToggle.checked;
-        yearFilter.disabled = disabled;
-        tagFilter.disabled = disabled;
-        searchInput.disabled = disabled;
-        if (disabled) {
-          yearFilter.value = '';
-          tagFilter.value = '';
-          searchInput.value = '';
-        }
-        runSearch(true);
-      });
       scrollViewport.addEventListener('scroll', onViewportScroll, { passive: true });
       window.addEventListener('resize', debounce(() => {
         recomputeVirtualMetrics();
@@ -335,10 +279,13 @@
         if (!state.selected) {
           return;
         }
-        const response = await fetch(state.selected.open_url, { method: 'POST' });
-        if (!response.ok) {
-          showError('Unable to open the original file.');
-          return;
+        try {
+          const response = await fetch(state.selected.open_url, { method: 'POST' });
+          if (!response.ok) {
+            showError('Unable to open the original file.');
+          }
+        } catch (error) {
+          showError('Connection lost. Refresh the page and try again.');
         }
       });
       copyPathBtn.addEventListener('click', async () => {
@@ -349,26 +296,7 @@
       });
 
       async function boot() {
-        await loadHealth();
         await runSearch(true);
-      }
-
-      async function loadHealth() {
-        try {
-          const response = await fetch('/api/health');
-          const data = await response.json();
-          healthBadge.textContent = data.ok ? 'Ready' : 'Error';
-          healthBadge.className = data.ok
-            ? 'rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold text-green-700'
-            : 'rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700';
-          backendValue.textContent = data.backend || '-';
-          sourceValue.textContent = data.config_source || '-';
-        } catch (error) {
-          healthBadge.textContent = 'Offline';
-          healthBadge.className = 'rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700';
-          backendValue.textContent = '-';
-          sourceValue.textContent = '-';
-        }
       }
 
       async function runSearch(reset) {
@@ -376,7 +304,6 @@
         state.loadingSearch = true;
         state.loadingPage = false;
         resultCount.textContent = 'Loading library...';
-        updateLoadState();
         state.requestId += 1;
         const requestId = state.requestId;
 
@@ -385,12 +312,15 @@
           state.total = 0;
           state.hasMore = false;
           state.items = [];
+          state.virtual.renderedStartRow = -1;
+          state.virtual.renderedEndRow = -1;
+          state.virtual.renderedTotalRows = -1;
+          state.virtual.renderedColumns = -1;
           photoGrid.innerHTML = '';
           topSpacer.style.height = '0px';
           bottomSpacer.style.height = '0px';
           scrollViewport.scrollTop = 0;
           bottomSpacer.style.height = '0px';
-          pageIndicator.textContent = 'WINDOWED 0';
         }
 
         const params = new URLSearchParams({
@@ -398,17 +328,12 @@
           page_size: String(state.pageSize),
         });
 
-        if (searchInput.value.trim()) {
-          params.set('text', searchInput.value.trim());
+        const textQuery = searchInput.value.trim();
+        if (textQuery) {
+          params.set('text', textQuery);
         }
         if (yearFilter.value) {
           params.set('date', yearFilter.value);
-        }
-        if (tagFilter.value.trim()) {
-          params.set('tag', tagFilter.value.trim());
-        }
-        if (recentToggle.checked) {
-          params.set('recent', '1');
         }
 
         try {
@@ -448,7 +373,6 @@
           return;
         }
         state.loadingPage = true;
-        updateLoadState();
 
         const params = buildQueryParams(state.page + 1);
         const requestId = state.requestId;
@@ -476,7 +400,6 @@
         } finally {
           if (requestId === state.requestId) {
             state.loadingPage = false;
-            updateLoadState();
           }
         }
       }
@@ -487,26 +410,25 @@
           page_size: String(state.pageSize),
         });
 
-        if (searchInput.value.trim()) {
-          params.set('text', searchInput.value.trim());
+        const textQuery = searchInput.value.trim();
+        if (textQuery) {
+          params.set('text', textQuery);
         }
         if (yearFilter.value) {
           params.set('date', yearFilter.value);
-        }
-        if (tagFilter.value.trim()) {
-          params.set('tag', tagFilter.value.trim());
-        }
-        if (recentToggle.checked) {
-          params.set('recent', '1');
         }
         return params;
       }
 
       function renderVisibleWindow() {
         const photos = state.items;
-        photoGrid.innerHTML = '';
 
         if (photos.length === 0) {
+          state.virtual.renderedStartRow = -1;
+          state.virtual.renderedEndRow = -1;
+          state.virtual.renderedTotalRows = -1;
+          state.virtual.renderedColumns = -1;
+          photoGrid.replaceChildren();
           photoGrid.classList.add('hidden');
           emptyState.classList.remove('hidden');
           scrollHint.classList.add('hidden');
@@ -530,11 +452,25 @@
         topSpacer.style.height = `${Math.max(0, startRow * rowStride)}px`;
         bottomSpacer.style.height = `${Math.max(0, (totalRows - endRow) * rowStride)}px`;
 
+        if (
+          state.virtual.renderedStartRow === startRow &&
+          state.virtual.renderedEndRow === endRow &&
+          state.virtual.renderedTotalRows === totalRows &&
+          state.virtual.renderedColumns === columns
+        ) {
+          return;
+        }
+
+        state.virtual.renderedStartRow = startRow;
+        state.virtual.renderedEndRow = endRow;
+        state.virtual.renderedTotalRows = totalRows;
+        state.virtual.renderedColumns = columns;
+
+        const fragment = document.createDocumentFragment();
         photos.slice(startIndex, endIndex).forEach((photo, index) => {
           const card = document.createElement('button');
           card.type = 'button';
-          card.className = 'photo-card group relative aspect-square overflow-hidden bg-gray-100 rounded-xl cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 text-left';
-          card.style.animationDelay = `${(index % columns) * 0.03}s`;
+          card.className = 'group relative aspect-square overflow-hidden bg-gray-100 rounded-xl cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 text-left';
           card.innerHTML = `
             <img src="${photo.thumb_url}" alt="${escapeHTML(photo.filename)}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy">
             <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
@@ -548,8 +484,10 @@
             </div>
           `;
           card.addEventListener('click', () => openLightbox(photo.id));
-          photoGrid.appendChild(card);
+          fragment.appendChild(card);
         });
+
+        photoGrid.replaceChildren(fragment);
       }
 
       function recomputeVirtualMetrics() {
@@ -579,16 +517,13 @@
 
       function maybeLoadMore() {
         if (state.loadingSearch || !state.hasMore || state.loadingPage || state.items.length === 0) {
-          updateLoadState();
           return;
         }
         const threshold = state.virtual.itemHeight * 3;
         const remaining = scrollViewport.scrollHeight - scrollViewport.scrollTop - scrollViewport.clientHeight;
         if (remaining < threshold) {
           loadNextPage();
-          return;
         }
-        updateLoadState();
       }
 
       async function openLightbox(photoId) {
@@ -634,10 +569,8 @@
         if (state.total === 0) {
           resultCount.textContent = 'No photos found';
         } else {
-          resultCount.textContent = `Loaded ${state.items.length} of ${state.total} photos`;
+          resultCount.textContent = `${state.total} photos`;
         }
-        pageIndicator.textContent = `WINDOWED ${state.items.length}`;
-        updateLoadState();
       }
 
       function showError(message) {
@@ -670,26 +603,6 @@
           clearTimeout(timer);
           timer = setTimeout(() => fn(...args), wait);
         };
-      }
-
-      function updateLoadState() {
-        if (state.loadingSearch) {
-          loadState.textContent = 'Searching';
-          loadState.className = 'rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600';
-          return;
-        }
-        if (state.loadingPage) {
-          loadState.textContent = 'Loading';
-          loadState.className = 'rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600';
-          return;
-        }
-        if (state.hasMore) {
-          loadState.textContent = 'Auto append';
-          loadState.className = 'rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600';
-          return;
-        }
-        loadState.textContent = state.items.length > 0 ? 'End reached' : 'Idle';
-        loadState.className = 'rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600';
       }
 
       function escapeHTML(value) {
