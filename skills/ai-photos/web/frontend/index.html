@@ -150,10 +150,9 @@
 
       <div class="px-6 py-4 flex items-center justify-between gap-4 text-sm text-gray-500">
         <div id="resultCount">正在加载图库...</div>
-        <div class="flex items-center gap-2">
-          <button id="prevPage" type="button" class="rounded-full bg-gray-100 px-3 py-1.5 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
-          <span id="pageIndicator" class="text-xs uppercase tracking-[0.2em] text-gray-400">PAGE 1</span>
-          <button id="nextPage" type="button" class="rounded-full bg-gray-100 px-3 py-1.5 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
+        <div class="flex items-center gap-3">
+          <span id="pageIndicator" class="text-xs uppercase tracking-[0.2em] text-gray-400">WINDOWED LIST</span>
+          <span id="loadState" class="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">空闲</span>
         </div>
       </div>
 
@@ -161,8 +160,11 @@
         <div id="errorBanner" class="hidden rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600"></div>
       </div>
 
-      <div class="flex-1 overflow-y-auto px-4 sm:px-6 pb-20">
+      <div id="scrollViewport" class="flex-1 overflow-y-auto px-4 sm:px-6 pb-20">
+        <div id="topSpacer" style="height: 0;"></div>
         <div id="photoGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 sm:gap-4"></div>
+        <div id="bottomSpacer" style="height: 0;"></div>
+        <div id="scrollHint" class="hidden py-6 text-center text-xs uppercase tracking-[0.24em] text-gray-400">继续滚动以加载更多</div>
 
         <div id="emptyState" class="hidden flex-col items-center justify-center h-64 text-center">
           <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,12 +239,26 @@
 
     <script>
       const state = {
-        page: 1,
+        page: 0,
         pageSize: 25,
         total: 0,
+        hasMore: false,
+        loadingSearch: false,
+        loadingPage: false,
+        items: [],
         selected: null,
+        requestId: 0,
+        virtual: {
+          columns: 1,
+          gap: 16,
+          itemHeight: 220,
+          overscanRows: 3,
+        },
       };
 
+      const scrollViewport = document.getElementById('scrollViewport');
+      const topSpacer = document.getElementById('topSpacer');
+      const bottomSpacer = document.getElementById('bottomSpacer');
       const photoGrid = document.getElementById('photoGrid');
       const searchInput = document.getElementById('searchInput');
       const yearFilter = document.getElementById('yearFilter');
@@ -251,9 +267,9 @@
       const resultCount = document.getElementById('resultCount');
       const emptyState = document.getElementById('emptyState');
       const errorBanner = document.getElementById('errorBanner');
-      const prevPage = document.getElementById('prevPage');
-      const nextPage = document.getElementById('nextPage');
       const pageIndicator = document.getElementById('pageIndicator');
+      const loadState = document.getElementById('loadState');
+      const scrollHint = document.getElementById('scrollHint');
       const healthBadge = document.getElementById('healthBadge');
       const backendValue = document.getElementById('backendValue');
       const sourceValue = document.getElementById('sourceValue');
@@ -275,20 +291,16 @@
 
       document.getElementById('searchForm').addEventListener('submit', (event) => {
         event.preventDefault();
-        state.page = 1;
-        runSearch();
+        runSearch(true);
       });
       searchInput.addEventListener('input', debounce(() => {
-        state.page = 1;
-        runSearch();
+        runSearch(true);
       }, 220));
       yearFilter.addEventListener('change', () => {
-        state.page = 1;
-        runSearch();
+        runSearch(true);
       });
       tagFilter.addEventListener('input', debounce(() => {
-        state.page = 1;
-        runSearch();
+        runSearch(true);
       }, 220));
       recentToggle.addEventListener('change', () => {
         const disabled = recentToggle.checked;
@@ -300,23 +312,14 @@
           tagFilter.value = '';
           searchInput.value = '';
         }
-        state.page = 1;
-        runSearch();
+        runSearch(true);
       });
-      prevPage.addEventListener('click', () => {
-        if (state.page <= 1) {
-          return;
-        }
-        state.page -= 1;
-        runSearch();
-      });
-      nextPage.addEventListener('click', () => {
-        if (!hasMore()) {
-          return;
-        }
-        state.page += 1;
-        runSearch();
-      });
+      scrollViewport.addEventListener('scroll', onViewportScroll, { passive: true });
+      window.addEventListener('resize', debounce(() => {
+        recomputeVirtualMetrics();
+        renderVisibleWindow();
+        maybeLoadMore();
+      }, 120));
       closeLightbox.addEventListener('click', closeLightboxHandler);
       toggleInfoBtn.addEventListener('click', () => {
         infoPanel.classList.toggle('hidden');
@@ -347,7 +350,7 @@
 
       async function boot() {
         await loadHealth();
-        await runSearch();
+        await runSearch(true);
       }
 
       async function loadHealth() {
@@ -368,12 +371,30 @@
         }
       }
 
-      async function runSearch() {
+      async function runSearch(reset) {
         clearError();
+        state.loadingSearch = true;
+        state.loadingPage = false;
         resultCount.textContent = '正在加载图库...';
+        updateLoadState();
+        state.requestId += 1;
+        const requestId = state.requestId;
+
+        if (reset) {
+          state.page = 0;
+          state.total = 0;
+          state.hasMore = false;
+          state.items = [];
+          photoGrid.innerHTML = '';
+          topSpacer.style.height = '0px';
+          bottomSpacer.style.height = '0px';
+          scrollViewport.scrollTop = 0;
+          bottomSpacer.style.height = '0px';
+          pageIndicator.textContent = 'WINDOWED 0';
+        }
 
         const params = new URLSearchParams({
-          page: String(state.page),
+          page: '1',
           page_size: String(state.pageSize),
         });
 
@@ -393,36 +414,127 @@
         try {
           const response = await fetch(`/api/search?${params.toString()}`);
           const payload = await response.json();
+          if (requestId !== state.requestId) {
+            return;
+          }
           if (!response.ok) {
             throw new Error(payload?.error?.message || '搜索失败');
           }
+          state.loadingSearch = false;
+          state.page = 1;
           state.total = payload.total || 0;
-          renderPhotos(payload.items || []);
-          renderMeta(payload.total || 0);
+          state.hasMore = Boolean(payload.has_more);
+          state.items = payload.items || [];
+          recomputeVirtualMetrics();
+          renderVisibleWindow();
+          renderMeta();
+          maybeLoadMore();
         } catch (error) {
-          renderPhotos([]);
-          renderMeta(0);
+          if (requestId !== state.requestId) {
+            return;
+          }
+          state.loadingSearch = false;
+          state.items = [];
+          state.total = 0;
+          state.hasMore = false;
+          renderVisibleWindow();
+          renderMeta();
           showError(error.message || '搜索失败');
         }
       }
 
-      function renderPhotos(photos) {
+      async function loadNextPage() {
+        if (!state.hasMore || state.loadingPage) {
+          return;
+        }
+        state.loadingPage = true;
+        updateLoadState();
+
+        const params = buildQueryParams(state.page + 1);
+        const requestId = state.requestId;
+
+        try {
+          const response = await fetch(`/api/search?${params.toString()}`);
+          const payload = await response.json();
+          if (requestId !== state.requestId) {
+            return;
+          }
+          if (!response.ok) {
+            throw new Error(payload?.error?.message || '加载更多失败');
+          }
+          state.page += 1;
+          state.total = payload.total || state.total;
+          state.hasMore = Boolean(payload.has_more);
+          state.items.push(...(payload.items || []));
+          recomputeVirtualMetrics();
+          renderVisibleWindow();
+          renderMeta();
+        } catch (error) {
+          if (requestId === state.requestId) {
+            showError(error.message || '加载更多失败');
+          }
+        } finally {
+          if (requestId === state.requestId) {
+            state.loadingPage = false;
+            updateLoadState();
+          }
+        }
+      }
+
+      function buildQueryParams(page) {
+        const params = new URLSearchParams({
+          page: String(page),
+          page_size: String(state.pageSize),
+        });
+
+        if (searchInput.value.trim()) {
+          params.set('text', searchInput.value.trim());
+        }
+        if (yearFilter.value) {
+          params.set('date', yearFilter.value);
+        }
+        if (tagFilter.value.trim()) {
+          params.set('tag', tagFilter.value.trim());
+        }
+        if (recentToggle.checked) {
+          params.set('recent', '1');
+        }
+        return params;
+      }
+
+      function renderVisibleWindow() {
+        const photos = state.items;
         photoGrid.innerHTML = '';
 
         if (photos.length === 0) {
           photoGrid.classList.add('hidden');
           emptyState.classList.remove('hidden');
+          scrollHint.classList.add('hidden');
           return;
         }
 
         photoGrid.classList.remove('hidden');
         emptyState.classList.add('hidden');
+        scrollHint.classList.toggle('hidden', !state.hasMore);
 
-        photos.forEach((photo, index) => {
+        const columns = state.virtual.columns;
+        const rowStride = state.virtual.itemHeight + state.virtual.gap;
+        const viewportHeight = scrollViewport.clientHeight || 1;
+        const totalRows = Math.ceil(photos.length / columns);
+        const startRow = Math.max(0, Math.floor(scrollViewport.scrollTop / rowStride) - state.virtual.overscanRows);
+        const visibleRows = Math.ceil(viewportHeight / rowStride) + state.virtual.overscanRows * 2;
+        const endRow = Math.min(totalRows, startRow + visibleRows);
+        const startIndex = startRow * columns;
+        const endIndex = Math.min(photos.length, endRow * columns);
+
+        topSpacer.style.height = `${Math.max(0, startRow * rowStride)}px`;
+        bottomSpacer.style.height = `${Math.max(0, (totalRows - endRow) * rowStride)}px`;
+
+        photos.slice(startIndex, endIndex).forEach((photo, index) => {
           const card = document.createElement('button');
           card.type = 'button';
           card.className = 'photo-card group relative aspect-square overflow-hidden bg-gray-100 rounded-xl cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 text-left';
-          card.style.animationDelay = `${index * 0.03}s`;
+          card.style.animationDelay = `${(index % columns) * 0.03}s`;
           card.innerHTML = `
             <img src="${photo.thumb_url}" alt="${escapeHTML(photo.filename)}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy">
             <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
@@ -438,6 +550,45 @@
           card.addEventListener('click', () => openLightbox(photo.id));
           photoGrid.appendChild(card);
         });
+      }
+
+      function recomputeVirtualMetrics() {
+        const wasHidden = photoGrid.classList.contains('hidden');
+        if (wasHidden) {
+          photoGrid.classList.remove('hidden');
+        }
+        const style = window.getComputedStyle(photoGrid);
+        const columns = Math.max(1, style.gridTemplateColumns.split(' ').filter(Boolean).length);
+        const gap = Number.parseFloat(style.rowGap || style.gap || '16') || 16;
+        const gridWidth = photoGrid.clientWidth || photoGrid.parentElement.clientWidth || scrollViewport.clientWidth;
+        const itemWidth = Math.max(120, (gridWidth - gap * (columns - 1)) / columns);
+        state.virtual.columns = columns;
+        state.virtual.gap = gap;
+        state.virtual.itemHeight = itemWidth;
+        if (wasHidden && state.items.length === 0) {
+          photoGrid.classList.add('hidden');
+        }
+      }
+
+      function onViewportScroll() {
+        window.requestAnimationFrame(() => {
+          renderVisibleWindow();
+          maybeLoadMore();
+        });
+      }
+
+      function maybeLoadMore() {
+        if (state.loadingSearch || !state.hasMore || state.loadingPage || state.items.length === 0) {
+          updateLoadState();
+          return;
+        }
+        const threshold = state.virtual.itemHeight * 3;
+        const remaining = scrollViewport.scrollHeight - scrollViewport.scrollTop - scrollViewport.clientHeight;
+        if (remaining < threshold) {
+          loadNextPage();
+          return;
+        }
+        updateLoadState();
       }
 
       async function openLightbox(photoId) {
@@ -479,15 +630,14 @@
         }, 300);
       }
 
-      function renderMeta(total) {
-        resultCount.textContent = total === 0 ? '未找到照片' : `共 ${total} 张照片`;
-        pageIndicator.textContent = `PAGE ${state.page}`;
-        prevPage.disabled = state.page <= 1;
-        nextPage.disabled = !hasMore();
-      }
-
-      function hasMore() {
-        return state.page * state.pageSize < state.total;
+      function renderMeta() {
+        if (state.total === 0) {
+          resultCount.textContent = '未找到照片';
+        } else {
+          resultCount.textContent = `已加载 ${state.items.length} / ${state.total} 张照片`;
+        }
+        pageIndicator.textContent = `WINDOWED ${state.items.length}`;
+        updateLoadState();
       }
 
       function showError(message) {
@@ -520,6 +670,26 @@
           clearTimeout(timer);
           timer = setTimeout(() => fn(...args), wait);
         };
+      }
+
+      function updateLoadState() {
+        if (state.loadingSearch) {
+          loadState.textContent = '搜索中';
+          loadState.className = 'rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600';
+          return;
+        }
+        if (state.loadingPage) {
+          loadState.textContent = '加载中';
+          loadState.className = 'rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600';
+          return;
+        }
+        if (state.hasMore) {
+          loadState.textContent = '滚动追加';
+          loadState.className = 'rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600';
+          return;
+        }
+        loadState.textContent = state.items.length > 0 ? '已到底部' : '空闲';
+        loadState.className = 'rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600';
       }
 
       function escapeHTML(value) {
