@@ -48,12 +48,13 @@ jobs:
     needs: prepare
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Run tests
         run: go test ./...
@@ -79,12 +80,13 @@ jobs:
             goarch: amd64
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Build archive
         env:
@@ -120,7 +122,7 @@ jobs:
           fi
 
       - name: Upload packaged binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ai-photos-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
@@ -133,18 +135,32 @@ jobs:
       - build
     steps:
       - name: Download packaged binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: release-assets
           merge-multiple: true
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.version }}
-          name: ${{ needs.prepare.outputs.version }}
-          target_commitish: ${{ github.sha }}
-          files: release-assets/*
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          overwrite_files: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          assets=(release-assets/*)
+
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "no release assets found"
+            exit 1
+          fi
+
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" "${assets[@]}" --clobber
+          else
+            gh release create "${VERSION}" "${assets[@]}" \
+              --title "${VERSION}" \
+              --target "${GITHUB_SHA}" \
+              --verify-tag \
+              --generate-notes
+          fi
