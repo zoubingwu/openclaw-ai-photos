@@ -164,6 +164,8 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request, variant str
 	}
 	w.Header().Set("Content-Type", asset.ContentType)
 	if asset.Derived {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 	}
 	http.ServeFile(w, r, asset.Path)

@@ -212,6 +212,9 @@ func prepareWithBackend(source string, spec PrepareSpec, backend imageBackend) (
 	}
 
 	output := deriveOutputPath(source, spec)
+	if outWidth, outHeight, ok := readCachedDerivedImage(output); ok {
+		return buildPrepareResult(source, output, backend.name, spec, outWidth, outHeight, false), nil
+	}
 	if err := writeDerivedImage(backend, source, output, spec); err != nil {
 		return PrepareResult{}, err
 	}
@@ -220,6 +223,18 @@ func prepareWithBackend(source string, spec PrepareSpec, backend imageBackend) (
 		return PrepareResult{}, err
 	}
 	return buildPrepareResult(source, output, backend.name, spec, outWidth, outHeight, false), nil
+}
+
+func readCachedDerivedImage(path string) (int, int, bool) {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return 0, 0, false
+	}
+	width, height, err := readDimensionsBuiltin(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	return width, height, true
 }
 
 func deriveOutputPath(path string, spec PrepareSpec) string {
