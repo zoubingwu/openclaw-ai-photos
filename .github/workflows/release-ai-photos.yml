@@ -97,12 +97,14 @@ jobs:
         run: |
           binary_base="ai-photos"
           binary_name="${binary_base}"
-          archive_name="${binary_base}_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
+          versioned_archive_name="${binary_base}_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
+          stable_archive_name="${binary_base}_${GOOS}_${GOARCH}.tar.gz"
           package_dir="${RUNNER_TEMP}/${GOOS}-${GOARCH}"
 
           if [ "${GOOS}" = "windows" ]; then
             binary_name="${binary_base}.exe"
-            archive_name="${binary_base}_${VERSION}_${GOOS}_${GOARCH}.zip"
+            versioned_archive_name="${binary_base}_${VERSION}_${GOOS}_${GOARCH}.zip"
+            stable_archive_name="${binary_base}_${GOOS}_${GOARCH}.zip"
           fi
 
           rm -rf "${package_dir}"
@@ -114,12 +116,14 @@ jobs:
           if [ "${GOOS}" = "windows" ]; then
             (
               cd "${package_dir}"
-              zip -q "${RUNNER_TEMP}/${archive_name}" "${binary_name}"
+              zip -q "${RUNNER_TEMP}/${versioned_archive_name}" "${binary_name}"
             )
-            mv "${RUNNER_TEMP}/${archive_name}" "dist/${archive_name}"
+            mv "${RUNNER_TEMP}/${versioned_archive_name}" "dist/${versioned_archive_name}"
           else
-            tar -C "${package_dir}" -czf "dist/${archive_name}" "${binary_name}"
+            tar -C "${package_dir}" -czf "dist/${versioned_archive_name}" "${binary_name}"
           fi
+
+          cp "dist/${versioned_archive_name}" "dist/${stable_archive_name}"
 
       - name: Upload packaged binary
         uses: actions/upload-artifact@v6

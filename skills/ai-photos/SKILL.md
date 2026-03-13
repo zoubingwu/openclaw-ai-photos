@@ -10,7 +10,7 @@ description: |
   - "reconnect my photo album"
   - "find photos of ..."
 metadata:
-  version: v2.1.0
+  version: v2.2.0
 ---
 
 # ai-photos
@@ -126,7 +126,6 @@ It uses the latest published `ai-photos` CLI release from:
 - repository: `https://github.com/zoubingwu/openclaw-ai-photos`
 - install dir: `~/.openclaw/ai-photos/bin`
 - binary path: `~/.openclaw/ai-photos/bin/ai-photos`
-- cached version file: `~/.openclaw/ai-photos/bin/version.txt`
 
 At the start of every ai-photos task, run the bootstrap flow exactly once and reuse the resulting binary path for the rest of the task.
 
@@ -139,7 +138,6 @@ ensure_ai_photos() {
   AI_PHOTOS_REPO="zoubingwu/openclaw-ai-photos"
   AI_PHOTOS_BIN_DIR="$HOME/.openclaw/ai-photos/bin"
   AI_PHOTOS_BIN="$AI_PHOTOS_BIN_DIR/ai-photos"
-  AI_PHOTOS_VERSION_FILE="$AI_PHOTOS_BIN_DIR/version.txt"
 
   mkdir -p "$AI_PHOTOS_BIN_DIR"
 
@@ -163,50 +161,30 @@ ensure_ai_photos() {
       ;;
   esac
 
-  latest_tag="$(
-    curl -fsSL "https://api.github.com/repos/${AI_PHOTOS_REPO}/releases/latest" \
-    | tr -d '\n' \
-    | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p'
-  )"
-
-  current_tag=""
-  if [ -f "$AI_PHOTOS_VERSION_FILE" ]; then
-    current_tag="$(cat "$AI_PHOTOS_VERSION_FILE")"
+  archive_name="ai-photos_${goos}_${goarch}.tar.gz"
+  archive_url="https://github.com/${AI_PHOTOS_REPO}/releases/latest/download/${archive_name}"
+  tmp_dir="$(mktemp -d)"
+  had_existing_binary=0
+  if [ -x "$AI_PHOTOS_BIN" ]; then
+    had_existing_binary=1
   fi
 
-  if [ -z "$latest_tag" ]; then
-    if [ -x "$AI_PHOTOS_BIN" ]; then
-      printf '%s\n' "$AI_PHOTOS_BIN"
-      return 0
-    fi
-    echo "could not resolve latest ai-photos release tag" >&2
-    return 1
-  fi
-
-  if [ ! -x "$AI_PHOTOS_BIN" ] || [ "$current_tag" != "$latest_tag" ]; then
-    archive_name="ai-photos_${latest_tag}_${goos}_${goarch}.tar.gz"
-    tmp_dir="$(mktemp -d)"
-    had_existing_binary=0
-    if [ -x "$AI_PHOTOS_BIN" ]; then
-      had_existing_binary=1
-    fi
-
-    if curl -fL "https://github.com/${AI_PHOTOS_REPO}/releases/download/${latest_tag}/${archive_name}" -o "$tmp_dir/${archive_name}" \
-      && tar -xzf "$tmp_dir/${archive_name}" -C "$tmp_dir" \
-      && install -m 0755 "$tmp_dir/ai-photos" "$AI_PHOTOS_BIN"; then
-      printf '%s\n' "$latest_tag" > "$AI_PHOTOS_VERSION_FILE"
-    else
-      rm -rf "$tmp_dir"
-      if [ "$had_existing_binary" -eq 1 ]; then
-        printf '%s\n' "$AI_PHOTOS_BIN"
-        return 0
-      fi
-      return 1
-    fi
+  if curl -fL "${archive_url}" -o "$tmp_dir/${archive_name}" \
+    && tar -xzf "$tmp_dir/${archive_name}" -C "$tmp_dir" \
+    && install -m 0755 "$tmp_dir/ai-photos" "$AI_PHOTOS_BIN"; then
     rm -rf "$tmp_dir"
+    printf '%s\n' "$AI_PHOTOS_BIN"
+    return 0
   fi
 
-  printf '%s\n' "$AI_PHOTOS_BIN"
+  rm -rf "$tmp_dir"
+  if [ "$had_existing_binary" -eq 1 ]; then
+    printf '%s\n' "$AI_PHOTOS_BIN"
+    return 0
+  fi
+
+  echo "could not download ai-photos release archive" >&2
+  return 1
 }
 
 AI_PHOTOS_BIN="$(ensure_ai_photos)"
@@ -214,9 +192,9 @@ AI_PHOTOS_BIN="$(ensure_ai_photos)"
 
 Rules:
 - always run the bootstrap flow before using the CLI
-- if the latest release lookup fails but a cached binary already exists, continue with the cached binary
-- if the latest release is known but the download or unpack step fails, continue with the cached binary when one already exists
-- if the latest release lookup fails and no cached binary exists, setup is blocked
+- the bootstrap flow downloads the latest stable release asset from `releases/latest/download/...` and does not call `api.github.com`
+- if the latest asset download or unpack step fails, continue with the cached binary when one already exists
+- if the latest asset download fails and no cached binary exists, setup is blocked
 - do not tell the user to clone the repository or build the CLI locally unless troubleshooting requires it
 - if you need command details, use `"$AI_PHOTOS_BIN" help` or `"$AI_PHOTOS_BIN" help <subcommand>`
 

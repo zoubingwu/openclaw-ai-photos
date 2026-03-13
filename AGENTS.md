@@ -33,3 +33,11 @@ Published assets use these names:
 - `ai-photos_<version>_darwin_amd64.tar.gz`
 - `ai-photos_<version>_darwin_arm64.tar.gz`
 - `ai-photos_<version>_windows_amd64.zip`
+
+The release also publishes stable asset aliases for bootstrap downloads:
+
+- `ai-photos_linux_amd64.tar.gz`
+- `ai-photos_linux_arm64.tar.gz`
+- `ai-photos_darwin_amd64.tar.gz`
+- `ai-photos_darwin_arm64.tar.gz`
+- `ai-photos_windows_amd64.zip`
