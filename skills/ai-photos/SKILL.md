@@ -285,6 +285,33 @@ When answering:
 - if preview preparation fails on Linux without a local image backend, say so briefly and fall back to the original file only when it is safe to send as-is
 - if results are weak, say so and suggest a better query
 
+## Local web search
+
+When the user asks to open a browser view for the album:
+
+1. start the local web service from `web/`
+2. prefer the saved album profile; use environment variables only to fill missing backend fields
+3. wait for the JSON startup line and return the local URL to the user
+4. keep the process running while the user is browsing
+
+Run from `skills/ai-photos/web`:
+
+```bash
+go run ./cmd/ai-photos-web
+```
+
+If the user wants a specific album profile:
+
+```bash
+go run ./cmd/ai-photos-web --profile default
+```
+
+The web service provides:
+- a local search page
+- search/filter/detail APIs for the page
+- thumbnail and preview endpoints
+- an action to open the original local file
+
 ## Heartbeat run behavior
 
 When a heartbeat arrives for a configured album:
