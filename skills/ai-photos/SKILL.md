@@ -10,7 +10,7 @@ description: |
   - "reconnect my photo album"
   - "find photos of ..."
 metadata:
-  version: 1.1.1
+  version: 1.1.3
 ---
 
 # ai-photos
@@ -20,9 +20,10 @@ ai-photos turns one or more local photo sources into a searchable AI photo album
 When talking to users:
 - try to match the user's language
 - explain the outcome simply: choose local folders now, then use OpenClaw to search and organize them
-- describe capabilities and next steps instead of prescribing exact product or storage terminology
-- avoid internal terms unless the user asks or troubleshooting requires them
-- do not say setup is complete before one real search is verified
+- stay focused on the current ai-photos request
+- keep user-facing replies short and product-level: progress, readiness, and what the user can do next
+- keep implementation details internal unless the user asks or troubleshooting requires them
+- once indexing is complete and the backend is confirmed ready, say the album is ready and invite the user to try a search
 
 ## Required outcome
 
@@ -34,7 +35,7 @@ This task is not complete until all of the following are true:
 4. the first import succeeds, or an existing album is verified reachable
 5. the user explicitly approved automatic indexing or explicitly declined it
 6. if automatic indexing was approved, OpenClaw heartbeat is configured without breaking existing heartbeat tasks, the ai-photos block is present in `HEARTBEAT.md`, and one verification heartbeat has run
-7. a real search is verified against the indexed backend
+7. the user has been told the album is ready and has been invited to try a search
 8. the user has been sent the final handoff
 
 ## Internal terms
@@ -142,7 +143,7 @@ Use this same flow for:
 
 User-facing:
 
-- Tell the user photos are being imported and analyzed, and that large libraries may take some time.
+- Tell the user photos are being imported and that large libraries may take some time.
 
 `[AGENT]`
 
@@ -231,19 +232,20 @@ Then tell the user the result:
 ### Step 7 - Final handoff
 
 User-facing handoff should include:
-- connected photo folders
-- what the user can now do in OpenClaw
-- automatic indexing status
-- 3 or 4 example searches
-- a cloud claim reminder if the chosen storage needs it
+- that the album is ready to use
+- how the user can use it now: search in plain language or ask OpenClaw to help organize photos
+- whether automatic indexing is on or off, in one short sentence only when it matters
 
-Do not proactively include backend names, profile paths, JSONL files, or other internal implementation details unless the user asks or recovery requires them.
+Keep the handoff short and user-facing.
+Default to readiness, status, and next actions.
+Only include implementation details when the user asks or recovery requires them.
 
 `[AGENT]`
 
 Immediately after setup:
-- verify one real search against the indexed backend
-- if the result is clear, summarize it and send the top matching image or images
+- hand off directly once setup is ready
+- tell the user the album is ready to search
+- invite the user to search in plain language or ask OpenClaw to help organize photos
 - if the user declined automatic indexing, say clearly that the album is in manual-only indexing mode
 
 ## Search flow
@@ -260,7 +262,7 @@ python3 scripts/search_photos.py --recent
 When answering:
 - summarize the best matches clearly and in plain language
 - mention filenames, dates, or captions when useful
-- avoid explaining internal ingestion or storage details unless the user asks
+- answer at the product level unless the user asks for implementation details
 - before sending an image file, run `python3 scripts/prepare_image.py --mode preview <matched-file>`
 - send the returned `output_path` when possible
 - if results are weak, say so and suggest a better query
