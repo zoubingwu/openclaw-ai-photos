@@ -29,6 +29,21 @@ When talking to users:
 - keep user-facing replies short and product-level: progress, readiness, and what the user can do next
 - keep implementation details internal unless the user asks or troubleshooting requires them
 - once indexing is complete and the backend is confirmed ready, say the album is ready and invite the user to try a search
+- when the user asks what ai-photos can do, or when handing off a ready album, briefly describe the product in user terms:
+  - natural-language search across captions, scene labels, and tags
+  - date-based browsing and filtering
+  - a local web gallery for thumbnail browsing and large-photo viewing
+  - photo detail view with caption, scene, tags, capture time, device, location, orientation, and file info when available
+  - opening the original local file from the web UI
+  - manual sync now, optional automatic indexing later
+- when introducing the web UI, describe it as a local searchable gallery rather than an API or server unless implementation details are needed
+- keep these capability descriptions short, concrete, and user-facing; do not drift into backend details
+
+Suggested user-facing capability summary:
+
+- "You can search your photos in plain language, filter by date, and browse everything in a local gallery."
+- "The web UI shows thumbnails, opens large previews, and lets you inspect captions, tags, time, device, location, and other file details when available."
+- "You can also open the original local file directly, and later either sync changes manually or turn on automatic indexing."
 
 ## Required outcome
 
@@ -278,6 +293,7 @@ If preflight fails:
 User-facing for a new album:
 
 - Tell the user setup is in progress and that the selected folders will be searchable through OpenClaw when it finishes.
+- If useful, add one short product sentence such as: "You'll be able to search in plain language or browse everything in the local gallery once import finishes."
 
 `[AGENT]`
 
@@ -415,6 +431,7 @@ User-facing handoff should include:
 - that the album is ready to use
 - how the user can use it now: search in plain language or ask OpenClaw to help organize photos
 - whether automatic indexing is on or off, in one short sentence only when it matters
+- when useful, mention the local gallery capabilities in one short sentence: browse thumbnails, open large previews, inspect metadata, and open the original file
 
 Keep the handoff short and user-facing.
 Default to readiness, status, and next actions.
@@ -474,6 +491,12 @@ The web service provides:
 - search/filter/detail APIs for the page
 - thumbnail and preview endpoints
 - an action to open the original local file
+
+When handing the web UI to the user:
+- describe the page in product terms, for example:
+  - "The page lets you search in plain language, filter by date, scroll the gallery, open a large preview, and inspect metadata on the right."
+  - "When a photo has metadata, the detail panel can show caption, scene, tags, capture time, device, location, orientation, and file info."
+- prefer this product summary over technical endpoint descriptions unless the user is debugging
 
 ## Heartbeat run behavior
 
