@@ -11,6 +11,7 @@ BASE_DIR = Path.home() / ".openclaw" / "ai-photos"
 ALBUMS_DIR = BASE_DIR / "albums"
 TARGETS_DIR = BASE_DIR / "targets"
 PROFILE_VERSION = 1
+DEFAULT_PROFILE_NAME = "default"
 
 
 def ensure_storage_dirs():
@@ -27,12 +28,16 @@ def slugify_album_id(value):
 
 def is_path_like(value):
     """Detect whether a profile reference already looks like a filesystem path."""
+    if not value:
+        return False
     return any(ch in value for ch in ("/", "\\")) or value.startswith("~") or value.endswith(".json")
 
 
-def resolve_profile_path(ref):
+def resolve_profile_path(ref=None):
     """Resolve a profile name or path into the concrete profile JSON path."""
     ensure_storage_dirs()
+    if not ref:
+        return (ALBUMS_DIR / f"{DEFAULT_PROFILE_NAME}.json").resolve()
     if is_path_like(ref):
         path = Path(ref).expanduser()
         if path.suffix != ".json":
@@ -80,11 +85,16 @@ def normalize_sources(sources):
     return normalized
 
 
-def load_profile(ref):
+def load_profile(ref=None):
     """Load a saved album profile and validate its required fields."""
     path = resolve_profile_path(ref)
-    with open(path, encoding="utf-8") as f:
-        profile = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            profile = json.load(f)
+    except FileNotFoundError as e:
+        if ref:
+            raise ValueError(f"profile not found: {path}") from e
+        raise ValueError(f"default album profile not found: {path}") from e
     _require(profile, "version", path)
     _require(profile, "album_id", path)
     sources = _require(profile, "sources", path)
@@ -128,10 +138,15 @@ def _target_matches(backend, given, resolved):
 
 def resolve_backend_target(target=None, backend=None, profile_ref=None):
     """Resolve the backend kind and target from raw args or a saved profile."""
-    profile = load_profile(profile_ref) if profile_ref else None
+    if profile_ref is not None:
+        profile = load_profile(profile_ref)
+    elif target is None:
+        profile = load_profile()
+    else:
+        profile = None
     if profile is None:
         if target is None:
-            raise ValueError("target or --profile is required")
+            raise ValueError("target, --profile, or a saved default album profile is required")
         return backend or "db9", target, None
 
     profile_backend, profile_target = backend_target_from_profile(profile)
@@ -161,7 +176,8 @@ def save_profile(profile_ref, sources, backend, target, display_name=None, maint
     """Persist an album profile and, for TiDB, copy its target JSON into managed storage."""
     ensure_storage_dirs()
     profile_path = resolve_profile_path(profile_ref)
-    album_id = slugify_album_id(profile_path.stem if is_path_like(profile_ref) else profile_ref)
+    profile_name = profile_path.stem if not profile_ref or is_path_like(profile_ref) else profile_ref
+    album_id = slugify_album_id(profile_name)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     existing_created_at = now

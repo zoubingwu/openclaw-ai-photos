@@ -54,10 +54,10 @@ def run_tidb(target, sql):
 def main():
     """Import captioned records into the selected backend with upsert semantics."""
     ap = argparse.ArgumentParser(description="Import caption records into db9 or TiDB")
-    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON; optional when a default album profile exists")
     ap.add_argument("jsonl", help="JSONL records with manifest + caption fields")
     ap.add_argument("--backend", choices=["db9", "tidb"])
-    ap.add_argument("--profile", help="profile name or path to profile JSON")
+    ap.add_argument("--profile", help="profile name or path to profile JSON; overrides the default album profile")
     args = ap.parse_args()
     try:
         backend, target, _ = resolve_backend_target(target=args.target, backend=args.backend, profile_ref=args.profile)

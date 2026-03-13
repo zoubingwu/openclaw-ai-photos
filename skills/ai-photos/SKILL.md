@@ -41,12 +41,12 @@ This task is not complete until all of the following are true:
 
 - `photo sources`: one or more local paths scanned into the same album
 - `album backend`: where the searchable photo index is stored
-- `album profile`: saved reconnect information, stored under `~/.openclaw/ai-photos/albums/`
+- `album profile`: saved reconnect information, stored automatically under `~/.openclaw/ai-photos/albums/default.json`
 - `caption input JSONL`: the manifest file that still needs vision captions and import
 
 If the user asks what to save for later, say:
 
-> Save the album profile and backend details needed to reconnect this album later. Album profiles live under `~/.openclaw/ai-photos/albums/` by default.
+> OpenClaw saves the album profile automatically at `~/.openclaw/ai-photos/albums/default.json`. Save that file only if you want a manual backup.
 
 ## Onboarding
 
@@ -59,7 +59,7 @@ If the user asks what to save for later, say:
 > 2. Reconnect an existing photo album
 > 3. Search an already configured album
 >
-> If you choose reconnect, send the saved album profile or the backend details you used before.
+> For reconnect, I will first try the saved default album profile automatically. I will only ask for backend details if that is missing or incomplete.
 
 Branching:
 - `1`: continue to Step 1
@@ -98,18 +98,19 @@ For a new album, run exactly one setup command:
 
 ```bash
 # db9
-python3 scripts/setup_album.py my-album --source <photo-source-a> --source <photo-source-b> --backend db9 --target <db>
+python3 scripts/setup_album.py --source <photo-source-a> --source <photo-source-b> --backend db9 --target <db>
 
 # TiDB
-python3 scripts/setup_album.py my-album --source <photo-source-a> --source <photo-source-b> --backend tidb --target /path/to/tidb-target.json
+python3 scripts/setup_album.py --source <photo-source-a> --source <photo-source-b> --backend tidb --target /path/to/tidb-target.json
 ```
 
 Read the JSON output:
-- `profile_path` tells you where the album profile was saved
+- `profile_path` tells you where the default album profile was saved
 - `caption_input_jsonl` is the input for the first record ingestion pass
 - `sync.to_caption` tells you how many records still need captions and import
 
 For reconnect:
+- try the saved default album profile first
 - verify the backend is reachable
 - verify the album can be searched or written
 - ask only for missing backend details
@@ -136,7 +137,7 @@ Before generating records, read `references/caption-schema.md`.
 5. import it with:
 
 ```bash
-python3 scripts/import_records.py --profile my-album /tmp/photos.captioned.jsonl
+python3 scripts/import_records.py /tmp/photos.captioned.jsonl
 ```
 
 Rules:
@@ -168,7 +169,7 @@ Then create or update `<workspace>/HEARTBEAT.md` with:
 ```md
 # ai-photos heartbeat
 
-- Run `python3 <absolute-path-to-ai-photos>/scripts/sync_photos.py --profile my-album`.
+- Run `python3 <absolute-path-to-ai-photos>/scripts/sync_photos.py`.
 - If `to_caption` is `0`, reply `HEARTBEAT_OK`.
 - If `to_caption` is greater than `0`, run the shared record ingestion flow using `incremental_manifest_jsonl`.
 - Stay quiet unless indexing failed or user attention is needed.
@@ -193,7 +194,7 @@ Then tell the user the result:
 - album backend
 - auto sync status
 - 3 or 4 example searches
-- album profile location
+- the default album profile location
 - TiDB claim reminder if TiDB Zero is used
 
 Immediately after setup:
@@ -206,10 +207,10 @@ Immediately after setup:
 When the user asks to find photos, run:
 
 ```bash
-python3 scripts/search_photos.py --profile my-album --text "cat on sofa"
-python3 scripts/search_photos.py --profile my-album --tag cat
-python3 scripts/search_photos.py --profile my-album --date 2026-03
-python3 scripts/search_photos.py --profile my-album --recent
+python3 scripts/search_photos.py --text "cat on sofa"
+python3 scripts/search_photos.py --tag cat
+python3 scripts/search_photos.py --date 2026-03
+python3 scripts/search_photos.py --recent
 ```
 
 When answering:
@@ -225,7 +226,7 @@ When a heartbeat arrives for a configured album:
 1. run:
 
 ```bash
-python3 scripts/sync_photos.py --profile my-album
+python3 scripts/sync_photos.py
 ```
 
 2. read the JSON output

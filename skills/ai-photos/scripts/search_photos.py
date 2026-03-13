@@ -33,9 +33,9 @@ def esc(s):
 def main():
     """Run a date, text, tag, or recent search against the indexed photo backend."""
     ap = argparse.ArgumentParser(description="Search photos in db9 or TiDB by date, text, tag, or recent import order")
-    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON; optional when a default album profile exists")
     ap.add_argument("--backend", choices=["db9", "tidb"])
-    ap.add_argument("--profile", help="profile name or path to profile JSON")
+    ap.add_argument("--profile", help="profile name or path to profile JSON; overrides the default album profile")
     ap.add_argument("--date")
     ap.add_argument("--text")
     ap.add_argument("--tag")

@@ -65,10 +65,10 @@ def save_manifest(path, records):
 def main():
     """Build the next incremental sync manifest for the selected album sources."""
     ap = argparse.ArgumentParser(description="Run an incremental sync flow for the AI photo album")
-    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON; optional when a default album profile exists")
     ap.add_argument("sources", nargs="*", help="one or more photo source paths")
     ap.add_argument("--backend", choices=["db9", "tidb"])
-    ap.add_argument("--profile", help="profile name or path to profile JSON")
+    ap.add_argument("--profile", help="profile name or path to profile JSON; overrides the default album profile")
     ap.add_argument("--manifest-out")
     args = ap.parse_args()
     try:

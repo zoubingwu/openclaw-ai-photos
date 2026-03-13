@@ -92,9 +92,9 @@ def run_tidb(target, sql):
 def main():
     """Initialize the photo schema for either db9 or TiDB."""
     ap = argparse.ArgumentParser(description="Initialize photo album schema for db9 or TiDB")
-    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON; optional when a default album profile exists")
     ap.add_argument("--backend", choices=["db9", "tidb"])
-    ap.add_argument("--profile", help="profile name or path to profile JSON")
+    ap.add_argument("--profile", help="profile name or path to profile JSON; overrides the default album profile")
     args = ap.parse_args()
     try:
         backend, target, _ = resolve_backend_target(target=args.target, backend=args.backend, profile_ref=args.profile)
