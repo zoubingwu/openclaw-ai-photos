@@ -130,11 +130,12 @@ Input:
 Before generating records, read `references/caption-schema.md`.
 
 `[AGENT]` For each record in the input manifest:
-1. inspect the referenced image with a vision-capable model
-2. preserve the original fields
-3. add `caption`, `tags`, `scene`, `objects`, and `text_in_image`
-4. write one JSON object per line into a captioned JSONL file
-5. import it with:
+1. run `python3 scripts/prepare_image.py --mode caption <file_path>`
+2. send the returned `output_path` to the vision-capable model
+3. preserve the original manifest fields from the source image
+4. add `caption`, `tags`, `scene`, `objects`, and `text_in_image`
+5. write one JSON object per line into a captioned JSONL file
+6. import it with:
 
 ```bash
 python3 scripts/import_records.py /tmp/photos.captioned.jsonl
@@ -143,6 +144,7 @@ python3 scripts/import_records.py /tmp/photos.captioned.jsonl
 Rules:
 - keep captions short, factual, retrieval-oriented, and visually grounded
 - do not invent names, sensitive traits, or stories
+- do not replace the original `file_path` with the temporary derived image path
 - if there is nothing to caption, skip this step
 
 ### Step 6 - Enable auto sync
@@ -216,7 +218,8 @@ python3 scripts/search_photos.py --recent
 When answering:
 - summarize the best matches clearly
 - mention filenames, dates, or captions when useful
-- send image files when possible
+- before sending an image file, run `python3 scripts/prepare_image.py --mode preview <matched-file>`
+- send the returned `output_path` when possible
 - if results are weak, say so and suggest a better query
 
 ## Heartbeat run behavior
