@@ -4,13 +4,18 @@ import hashlib
 import json
 import mimetypes
 import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 try:
     from PIL import Image, ExifTags
 except Exception:
     Image = None
     ExifTags = None
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from album_profile import normalize_sources  # noqa: E402
 
 EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 
@@ -50,50 +55,46 @@ def extract_exif(path):
     return info
 
 
-def iter_files(root, recursive):
-    if recursive:
-        for dirpath, _, filenames in os.walk(root):
-            for name in sorted(filenames):
-                yield os.path.join(dirpath, name)
-    else:
-        for name in sorted(os.listdir(root)):
-            yield os.path.join(root, name)
+def iter_files(root):
+    for dirpath, _, filenames in os.walk(root):
+        for name in sorted(filenames):
+            yield os.path.join(dirpath, name)
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build photo manifest from a folder")
-    ap.add_argument("source", help="photo folder")
+    ap = argparse.ArgumentParser(description="Build photo manifest from one or more source folders")
+    ap.add_argument("sources", nargs="+", help="one or more photo source folders")
     ap.add_argument("-o", "--output", required=True, help="output JSONL path")
-    ap.add_argument("--no-recursive", action="store_true")
     args = ap.parse_args()
 
-    source = os.path.abspath(os.path.expanduser(args.source))
+    sources = normalize_sources(args.sources)
     records = 0
     with open(args.output, "w", encoding="utf-8") as out:
-        for path in iter_files(source, recursive=not args.no_recursive):
-            if not os.path.isfile(path):
-                continue
-            if os.path.basename(path).startswith("."):
-                continue
-            ext = os.path.splitext(path)[1].lower()
-            if ext not in EXTS:
-                continue
-            stat = os.stat(path)
-            exif = extract_exif(path)
-            rec = {
-                "file_path": path,
-                "filename": os.path.basename(path),
-                "sha256": sha256_file(path),
-                "mime_type": mimetypes.guess_type(path)[0],
-                "size_bytes": stat.st_size,
-                "width": exif["width"],
-                "height": exif["height"],
-                "taken_at": exif["taken_at"],
-                "exif": exif["exif"],
-            }
-            out.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            records += 1
-    print(json.dumps({"ok": True, "source": source, "output": args.output, "count": records}, ensure_ascii=False))
+        for source in sources:
+            for path in iter_files(source):
+                if not os.path.isfile(path):
+                    continue
+                if os.path.basename(path).startswith("."):
+                    continue
+                ext = os.path.splitext(path)[1].lower()
+                if ext not in EXTS:
+                    continue
+                stat = os.stat(path)
+                exif = extract_exif(path)
+                rec = {
+                    "file_path": path,
+                    "filename": os.path.basename(path),
+                    "sha256": sha256_file(path),
+                    "mime_type": mimetypes.guess_type(path)[0],
+                    "size_bytes": stat.st_size,
+                    "width": exif["width"],
+                    "height": exif["height"],
+                    "taken_at": exif["taken_at"],
+                    "exif": exif["exif"],
+                }
+                out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                records += 1
+    print(json.dumps({"ok": True, "sources": sources, "output": args.output, "count": records}, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

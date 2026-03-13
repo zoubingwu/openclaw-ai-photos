@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from album_profile import resolve_backend_target  # noqa: E402
 from tidb_http_sql import run_query, load_target  # noqa: E402
 
 DB9_SCHEMA_SQL = r'''
@@ -88,14 +89,20 @@ def run_tidb(target, sql):
 
 def main():
     ap = argparse.ArgumentParser(description="Initialize photo album schema for db9 or TiDB")
-    ap.add_argument("target", help="db9 database name/id or path to TiDB HTTP target JSON")
-    ap.add_argument("--backend", choices=["db9", "tidb"], default="db9")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("--backend", choices=["db9", "tidb"])
+    ap.add_argument("--profile", help="profile name or path to profile JSON")
     args = ap.parse_args()
-    sql = DB9_SCHEMA_SQL if args.backend == "db9" else TIDB_SCHEMA_SQL
-    out = run_db9(args.target, sql) if args.backend == "db9" else run_tidb(args.target, sql)
+    try:
+        backend, target, _ = resolve_backend_target(target=args.target, backend=args.backend, profile_ref=args.profile)
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        sys.exit(2)
+    sql = DB9_SCHEMA_SQL if backend == "db9" else TIDB_SCHEMA_SQL
+    out = run_db9(target, sql) if backend == "db9" else run_tidb(target, sql)
     try:
         parsed = json.loads(out)
-        print(json.dumps({"ok": True, "backend": args.backend, "target": args.target, "result": parsed}, ensure_ascii=False, indent=2))
+        print(json.dumps({"ok": True, "backend": backend, "target": target, "result": parsed}, ensure_ascii=False, indent=2))
     except Exception:
         print(out)
 

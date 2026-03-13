@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from album_profile import resolve_backend_target, resolve_sources  # noqa: E402
 from tidb_http_sql import run_query, load_target  # noqa: E402
 
 
@@ -58,18 +59,25 @@ def save_manifest(path, records):
 
 def main():
     ap = argparse.ArgumentParser(description="Run an incremental sync flow for the AI photo album")
-    ap.add_argument("target", help="db9 database name/id or path to TiDB HTTP target JSON")
-    ap.add_argument("source", help="photo folder")
-    ap.add_argument("--backend", choices=["db9", "tidb"], default="db9")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("sources", nargs="*", help="one or more photo source folders")
+    ap.add_argument("--backend", choices=["db9", "tidb"])
+    ap.add_argument("--profile", help="profile name or path to profile JSON")
     ap.add_argument("--manifest-out")
     args = ap.parse_args()
+    try:
+        backend, target, profile = resolve_backend_target(target=args.target, backend=args.backend, profile_ref=args.profile)
+        sources = resolve_sources(sources=args.sources, profile=profile)
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        sys.exit(2)
 
     manifest_path = args.manifest_out or str(Path(tempfile.gettempdir()) / 'ai-photos.manifest.jsonl')
     incremental_path = str(Path(manifest_path).with_suffix('.incremental.jsonl'))
-    run([sys.executable, str(Path(__file__).with_name('build_manifest.py')), args.source, '-o', manifest_path])
+    run([sys.executable, str(Path(__file__).with_name('build_manifest.py')), *sources, '-o', manifest_path])
     all_records = load_manifest(manifest_path)
     try:
-        existing = fetch_existing_db9(args.target) if args.backend == 'db9' else fetch_existing_tidb(args.target)
+        existing = fetch_existing_db9(target) if backend == 'db9' else fetch_existing_tidb(target)
         backend_status = 'ok'
     except Exception as e:
         existing = {}
@@ -84,9 +92,9 @@ def main():
     save_manifest(incremental_path, incremental)
     print(json.dumps({
         'ok': True,
-        'backend': args.backend,
-        'target': args.target,
-        'source': str(Path(args.source).expanduser().resolve()),
+        'backend': backend,
+        'target': target,
+        'sources': sources,
         'manifest_jsonl': manifest_path,
         'incremental_manifest_jsonl': incremental_path,
         'total_scanned': len(all_records),

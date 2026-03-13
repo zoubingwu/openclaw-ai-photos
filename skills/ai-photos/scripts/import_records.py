@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from album_profile import resolve_backend_target  # noqa: E402
 from tidb_http_sql import run_query, load_target  # noqa: E402
 
 
@@ -48,11 +49,17 @@ def run_tidb(target, sql):
 
 def main():
     ap = argparse.ArgumentParser(description="Import caption records into db9 or TiDB")
-    ap.add_argument("target", help="db9 database name/id or path to TiDB HTTP target JSON")
+    ap.add_argument("target", nargs="?", help="db9 database name/id or path to TiDB HTTP target JSON")
     ap.add_argument("jsonl", help="JSONL records with manifest + caption fields")
-    ap.add_argument("--backend", choices=["db9", "tidb"], default="db9")
+    ap.add_argument("--backend", choices=["db9", "tidb"])
+    ap.add_argument("--profile", help="profile name or path to profile JSON")
     args = ap.parse_args()
-    runner = run_db9 if args.backend == "db9" else run_tidb
+    try:
+        backend, target, _ = resolve_backend_target(target=args.target, backend=args.backend, profile_ref=args.profile)
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        sys.exit(2)
+    runner = run_db9 if backend == "db9" else run_tidb
 
     count = 0
     with open(args.jsonl, encoding="utf-8") as f:
@@ -65,7 +72,7 @@ def main():
             rec.setdefault("metadata", {})
             rec.setdefault("exif", {})
             rec["search_text"] = rec.get("search_text") or build_search_text(rec)
-            if args.backend == 'db9':
+            if backend == 'db9':
                 sql = f"""
 INSERT INTO photos (
   file_path, filename, sha256, mime_type, size_bytes, width, height, taken_at,
@@ -140,9 +147,9 @@ ON DUPLICATE KEY UPDATE
   text_in_image = VALUES(text_in_image), search_text = VALUES(search_text), metadata = VALUES(metadata),
   indexed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP;
 """
-            runner(args.target, sql)
+            runner(target, sql)
             count += 1
-    print(json.dumps({"ok": True, "backend": args.backend, "target": args.target, "imported": count}, ensure_ascii=False))
+    print(json.dumps({"ok": True, "backend": backend, "target": target, "imported": count}, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()
