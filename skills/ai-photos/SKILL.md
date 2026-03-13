@@ -10,7 +10,7 @@ description: |
   - "reconnect my photo album"
   - "find photos of ..."
 metadata:
-  version: 1.2.1
+  version: v2.0.0
 ---
 
 # ai-photos
