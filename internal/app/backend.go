@@ -47,16 +47,18 @@ type SearchResult struct {
 }
 
 type PhotoSummary struct {
-	ID          int64    `json:"id"`
-	FilePath    string   `json:"file_path"`
-	Filename    string   `json:"filename"`
-	Caption     string   `json:"caption"`
-	TakenAt     string   `json:"taken_at"`
-	Tags        []string `json:"tags"`
-	Scene       string   `json:"scene"`
-	TextInImage string   `json:"text_in_image"`
-	Width       int      `json:"width"`
-	Height      int      `json:"height"`
+	ID          int64          `json:"id"`
+	FilePath    string         `json:"file_path"`
+	Filename    string         `json:"filename"`
+	Caption     string         `json:"caption"`
+	MimeType    string         `json:"mime_type"`
+	TakenAt     string         `json:"taken_at"`
+	Tags        []string       `json:"tags"`
+	Scene       string         `json:"scene"`
+	TextInImage string         `json:"text_in_image"`
+	Exif        map[string]any `json:"exif"`
+	Width       int            `json:"width"`
+	Height      int            `json:"height"`
 }
 
 type db9Backend struct {
@@ -279,7 +281,7 @@ func buildSearchQueries(kind string, params SearchParams) (string, string) {
 	}
 	offset := (params.Page - 1) * params.PageSize
 	listSQL := fmt.Sprintf(
-		"SELECT id, file_path, filename, caption, taken_at, tags, scene, text_in_image, width, height FROM photos WHERE %s ORDER BY %s LIMIT %d OFFSET %d;",
+		"SELECT id, file_path, filename, caption, mime_type, taken_at, tags, scene, text_in_image, exif, width, height FROM photos WHERE %s ORDER BY %s LIMIT %d OFFSET %d;",
 		where,
 		orderBy,
 		params.PageSize,
@@ -331,12 +333,14 @@ func parsePhotoSummary(row []any) PhotoSummary {
 		FilePath:    parseString(valueAt(row, 1)),
 		Filename:    parseString(valueAt(row, 2)),
 		Caption:     parseString(valueAt(row, 3)),
-		TakenAt:     parseString(valueAt(row, 4)),
-		Tags:        parseStringSlice(valueAt(row, 5)),
-		Scene:       parseString(valueAt(row, 6)),
-		TextInImage: parseString(valueAt(row, 7)),
-		Width:       parseInt(valueAt(row, 8)),
-		Height:      parseInt(valueAt(row, 9)),
+		MimeType:    parseString(valueAt(row, 4)),
+		TakenAt:     parseString(valueAt(row, 5)),
+		Tags:        parseStringSlice(valueAt(row, 6)),
+		Scene:       parseString(valueAt(row, 7)),
+		TextInImage: parseString(valueAt(row, 8)),
+		Exif:        parseStringMap(valueAt(row, 9)),
+		Width:       parseInt(valueAt(row, 10)),
+		Height:      parseInt(valueAt(row, 11)),
 	}
 }
 
@@ -435,6 +439,35 @@ func parseStringSlice(value any) []string {
 		return []string{text}
 	default:
 		return []string{parseString(typed)}
+	}
+}
+
+func parseStringMap(value any) map[string]any {
+	switch typed := value.(type) {
+	case nil:
+		return map[string]any{}
+	case map[string]any:
+		return typed
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" || text == "null" {
+			return map[string]any{}
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(text), &decoded); err == nil && decoded != nil {
+			return decoded
+		}
+		return map[string]any{}
+	default:
+		data, err := json.Marshal(typed)
+		if err != nil {
+			return map[string]any{}
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(data, &decoded); err == nil && decoded != nil {
+			return decoded
+		}
+		return map[string]any{}
 	}
 }
 
