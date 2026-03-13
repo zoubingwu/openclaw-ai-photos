@@ -6,6 +6,7 @@
 - `cmd/ai-photos` is the only binary entrypoint.
 - `internal/app` holds shared profile, backend, sync, import, image-prep, and HTTP server logic.
 - `frontend` contains the embedded browser UI served by `ai-photos serve`.
+- `scripts` contains repository maintenance helpers such as release automation. Keep app runtime logic out of it.
 - `skills/ai-photos` is skill content only. Do not place Go source code there.
 - `skills/ai-photos/SKILL.md` is the single source of truth for skill-side instructions and schema details.
 
