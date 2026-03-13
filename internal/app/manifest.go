@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -57,6 +58,13 @@ type SyncSummary struct {
 	ToCaption           int      `json:"to_caption"`
 	BackendStatus       string   `json:"backend_status"`
 	NextStep            string   `json:"next_step"`
+}
+
+type photoMetadata struct {
+	Width   *int
+	Height  *int
+	TakenAt *string
+	Exif    map[string]any
 }
 
 func BuildManifest(sources []string, outputPath string) (ManifestSummary, error) {
@@ -196,7 +204,7 @@ func buildManifestRecord(path string) (ManifestRecord, error) {
 	if err != nil {
 		return ManifestRecord{}, err
 	}
-	width, height, takenAt := readPhotoMetadata(path)
+	metadata := readPhotoMetadata(path)
 	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(path)))
 	var mimePtr *string
 	if mimeType != "" {
@@ -208,40 +216,157 @@ func buildManifestRecord(path string) (ManifestRecord, error) {
 		SHA256:    digest,
 		MimeType:  mimePtr,
 		SizeBytes: stat.Size(),
-		Width:     width,
-		Height:    height,
-		TakenAt:   takenAt,
-		Exif:      map[string]any{},
+		Width:     metadata.Width,
+		Height:    metadata.Height,
+		TakenAt:   metadata.TakenAt,
+		Exif:      metadata.Exif,
 	}, nil
 }
 
-func readPhotoMetadata(path string) (*int, *int, *string) {
+func readPhotoMetadata(path string) photoMetadata {
+	if metadata, ok := readDarwinPhotoMetadata(path); ok {
+		fillMissingDimensions(path, &metadata)
+		if metadata.Exif == nil {
+			metadata.Exif = map[string]any{}
+		}
+		return metadata
+	}
+
+	width, height := readFallbackDimensions(path)
+	return photoMetadata{
+		Width:   width,
+		Height:  height,
+		TakenAt: nil,
+		Exif:    map[string]any{},
+	}
+}
+
+func readDarwinPhotoMetadata(path string) (photoMetadata, bool) {
+	if runtime.GOOS != "darwin" {
+		return photoMetadata{}, false
+	}
+	mdls, err := exec.LookPath("mdls")
+	if err != nil {
+		return photoMetadata{}, false
+	}
+	keys := []string{
+		"kMDItemAcquisitionMake",
+		"kMDItemAcquisitionModel",
+		"kMDItemPixelWidth",
+		"kMDItemPixelHeight",
+		"kMDItemContentCreationDate",
+		"kMDItemLatitude",
+		"kMDItemLongitude",
+		"kMDItemOrientation",
+	}
+	args := make([]string, 0, len(keys)*2+1)
+	for _, key := range keys {
+		args = append(args, "-name", key)
+	}
+	args = append(args, path)
+	out, err := exec.Command(mdls, args...).CombinedOutput()
+	if err != nil {
+		return photoMetadata{}, false
+	}
+
+	values := parseMDLSProperties(string(out))
+
+	metadata := photoMetadata{
+		Width:   parseOptionalInt(values["kMDItemPixelWidth"]),
+		Height:  parseOptionalInt(values["kMDItemPixelHeight"]),
+		TakenAt: parseMDLSDateTime(values["kMDItemContentCreationDate"]),
+		Exif:    map[string]any{},
+	}
+	appendOptional(metadata.Exif, "latitude", parseOptionalFloat(values["kMDItemLatitude"]))
+	appendOptional(metadata.Exif, "longitude", parseOptionalFloat(values["kMDItemLongitude"]))
+	appendOptional(metadata.Exif, "orientation", parseOptionalInt(values["kMDItemOrientation"]))
+	appendOptional(metadata.Exif, "device_make", parseOptionalString(values["kMDItemAcquisitionMake"]))
+	appendOptional(metadata.Exif, "device_model", parseOptionalString(values["kMDItemAcquisitionModel"]))
+	return metadata, true
+}
+
+func fillMissingDimensions(path string, metadata *photoMetadata) {
+	if metadata.Width != nil && metadata.Height != nil {
+		return
+	}
+	width, height := readFallbackDimensions(path)
+	if metadata.Width == nil {
+		metadata.Width = width
+	}
+	if metadata.Height == nil {
+		metadata.Height = height
+	}
+}
+
+func readFallbackDimensions(path string) (*int, *int) {
 	if width, height, err := readDimensionsBuiltin(path); err == nil {
-		return intPtr(width), intPtr(height), readDarwinContentCreationDate(path)
+		return intPtr(width), intPtr(height)
 	}
 	if sips, err := exec.LookPath("sips"); err == nil {
 		backend := imageBackend{name: "sips", identifyCmd: []string{sips}, convertCmd: []string{sips}}
 		if width, height, err := readDimensions(backend, path); err == nil {
-			return intPtr(width), intPtr(height), readDarwinContentCreationDate(path)
+			return intPtr(width), intPtr(height)
 		}
 	}
-	return nil, nil, readDarwinContentCreationDate(path)
+	return nil, nil
 }
 
-func readDarwinContentCreationDate(path string) *string {
-	if runtime.GOOS != "darwin" {
+func parseMDLSProperties(raw string) map[string]string {
+	properties := map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			value = unquoted
+		}
+		properties[key] = value
+	}
+	return properties
+}
+
+func parseOptionalString(value string) *string {
+	value = normalizeMDLSValue(value)
+	if value == "" {
 		return nil
 	}
-	mdls, err := exec.LookPath("mdls")
+	return &value
+}
+
+func parseOptionalInt(value string) *int {
+	value = normalizeMDLSValue(value)
+	if value == "" {
+		return nil
+	}
+	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		return nil
 	}
-	out, err := exec.Command(mdls, "-raw", "-name", "kMDItemContentCreationDate", path).CombinedOutput()
+	return &parsed
+}
+
+func parseOptionalFloat(value string) *float64 {
+	value = normalizeMDLSValue(value)
+	if value == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return nil
 	}
-	value := strings.TrimSpace(string(out))
-	if value == "" || value == "(null)" {
+	return &parsed
+}
+
+func parseMDLSDateTime(value string) *string {
+	value = normalizeMDLSValue(value)
+	if value == "" {
 		return nil
 	}
 	layouts := []string{
@@ -256,6 +381,31 @@ func readDarwinContentCreationDate(path string) *string {
 		}
 	}
 	return &value
+}
+
+func normalizeMDLSValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "(null)" || value == "<nil>" {
+		return ""
+	}
+	return value
+}
+
+func appendOptional(target map[string]any, key string, value any) {
+	switch typed := value.(type) {
+	case *int:
+		if typed != nil {
+			target[key] = *typed
+		}
+	case *float64:
+		if typed != nil {
+			target[key] = *typed
+		}
+	case *string:
+		if typed != nil && *typed != "" {
+			target[key] = *typed
+		}
+	}
 }
 
 func sha256File(path string) (string, error) {

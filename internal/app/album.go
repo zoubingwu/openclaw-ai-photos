@@ -97,6 +97,8 @@ type SetupSummary struct {
 	NextStep          string        `json:"next_step,omitempty"`
 }
 
+const importBatchSize = 50
+
 func InitSchema(ctx context.Context, target, backend, profileRef string) (InitSummary, error) {
 	resolvedBackend, resolvedTarget, _, err := ResolveBackendTarget(target, backend, profileRef)
 	if err != nil {
@@ -139,6 +141,18 @@ func ImportRecords(ctx context.Context, target, jsonlPath, backend, profileRef s
 	imported := 0
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
+	batch := make([]map[string]any, 0, importBatchSize)
+	flushBatch := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		if err := store.Exec(ctx, buildImportSQL(resolvedBackend, batch)); err != nil {
+			return err
+		}
+		imported += len(batch)
+		batch = batch[:0]
+		return nil
+	}
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -149,12 +163,17 @@ func ImportRecords(ctx context.Context, target, jsonlPath, backend, profileRef s
 			return ImportSummary{}, err
 		}
 		normalizeRecord(record)
-		if err := store.Exec(ctx, buildImportSQL(resolvedBackend, record)); err != nil {
-			return ImportSummary{}, err
+		batch = append(batch, record)
+		if len(batch) == importBatchSize {
+			if err := flushBatch(); err != nil {
+				return ImportSummary{}, err
+			}
 		}
-		imported++
 	}
 	if err := scanner.Err(); err != nil {
+		return ImportSummary{}, err
+	}
+	if err := flushBatch(); err != nil {
 		return ImportSummary{}, err
 	}
 
@@ -230,32 +249,19 @@ func buildSearchText(record map[string]any) string {
 	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
-func buildImportSQL(backend string, record map[string]any) string {
+func buildImportSQL(backend string, records []map[string]any) string {
+	values := make([]string, 0, len(records))
+	for _, record := range records {
+		values = append(values, buildImportValues(backend, record))
+	}
+
 	if backend == "db9" {
 		return fmt.Sprintf(`
 INSERT INTO photos (
   file_path, filename, sha256, mime_type, size_bytes, width, height, taken_at,
   exif, caption, tags, scene, objects, text_in_image, search_text, metadata, indexed_at, updated_at
-) VALUES (
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s::jsonb,
-  %s,
-  %s::jsonb,
-  %s,
-  %s::jsonb,
-  %s,
-  %s,
-  %s::jsonb,
-  now(),
-  now()
-)
+) VALUES
+%s
 ON CONFLICT (file_path) DO UPDATE SET
   sha256 = EXCLUDED.sha256,
   mime_type = EXCLUDED.mime_type,
@@ -274,22 +280,7 @@ ON CONFLICT (file_path) DO UPDATE SET
   indexed_at = now(),
   updated_at = now();
 `,
-			sqlLiteral(record["file_path"]),
-			sqlLiteral(record["filename"]),
-			sqlLiteral(record["sha256"]),
-			sqlLiteral(record["mime_type"]),
-			sqlLiteral(record["size_bytes"]),
-			sqlLiteral(record["width"]),
-			sqlLiteral(record["height"]),
-			sqlLiteral(record["taken_at"]),
-			sqlLiteral(record["exif"]),
-			sqlLiteral(record["caption"]),
-			sqlLiteral(record["tags"]),
-			sqlLiteral(record["scene"]),
-			sqlLiteral(record["objects"]),
-			sqlLiteral(record["text_in_image"]),
-			sqlLiteral(record["search_text"]),
-			sqlLiteral(record["metadata"]),
+			strings.Join(values, ",\n"),
 		)
 	}
 
@@ -297,26 +288,8 @@ ON CONFLICT (file_path) DO UPDATE SET
 INSERT INTO photos (
   file_path, filename, sha256, mime_type, size_bytes, width, height, taken_at,
   exif, caption, tags, scene, objects, text_in_image, search_text, metadata, indexed_at, updated_at
-) VALUES (
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  %s,
-  CURRENT_TIMESTAMP,
-  CURRENT_TIMESTAMP
-)
+) VALUES
+%s
 ON DUPLICATE KEY UPDATE
   sha256 = VALUES(sha256), mime_type = VALUES(mime_type), size_bytes = VALUES(size_bytes),
   width = VALUES(width), height = VALUES(height), taken_at = VALUES(taken_at), exif = VALUES(exif),
@@ -324,6 +297,37 @@ ON DUPLICATE KEY UPDATE
   text_in_image = VALUES(text_in_image), search_text = VALUES(search_text), metadata = VALUES(metadata),
   indexed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP;
 `,
+		strings.Join(values, ",\n"),
+	)
+}
+
+func buildImportValues(backend string, record map[string]any) string {
+	jsonCast := ""
+	timestampValue := "CURRENT_TIMESTAMP"
+	if backend == "db9" {
+		jsonCast = "::jsonb"
+		timestampValue = "now()"
+	}
+	return fmt.Sprintf(`(
+  %s,
+  %s,
+  %s,
+  %s,
+  %s,
+  %s,
+  %s,
+  %s,
+  %s%s,
+  %s,
+  %s%s,
+  %s,
+  %s%s,
+  %s,
+  %s,
+  %s%s,
+  %s,
+  %s
+)`,
 		sqlLiteral(record["file_path"]),
 		sqlLiteral(record["filename"]),
 		sqlLiteral(record["sha256"]),
@@ -333,13 +337,19 @@ ON DUPLICATE KEY UPDATE
 		sqlLiteral(record["height"]),
 		sqlLiteral(record["taken_at"]),
 		sqlLiteral(record["exif"]),
+		jsonCast,
 		sqlLiteral(record["caption"]),
 		sqlLiteral(record["tags"]),
+		jsonCast,
 		sqlLiteral(record["scene"]),
 		sqlLiteral(record["objects"]),
+		jsonCast,
 		sqlLiteral(record["text_in_image"]),
 		sqlLiteral(record["search_text"]),
 		sqlLiteral(record["metadata"]),
+		jsonCast,
+		timestampValue,
+		timestampValue,
 	)
 }
 
