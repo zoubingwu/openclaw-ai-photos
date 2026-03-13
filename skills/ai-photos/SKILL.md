@@ -10,7 +10,7 @@ description: |
   - "reconnect my photo album"
   - "find photos of ..."
 metadata:
-  version: 1.1.3
+  version: 1.2.1
 ---
 
 # ai-photos
@@ -55,6 +55,156 @@ Do not introduce them to the user unless needed.
 
 If the user asks what to save for later, explain that OpenClaw saves the reconnect information automatically at `~/.openclaw/ai-photos/albums/default.json`, and that they only need to keep that file if they want a manual backup.
 
+## Caption schema
+
+Each captioned JSONL line should contain the original manifest fields plus vision-model output.
+
+Required base fields:
+- `file_path`
+- `filename`
+- `sha256`
+- `mime_type`
+- `size_bytes`
+- `width`
+- `height`
+- `taken_at`
+- `exif`
+
+Vision fields:
+- `caption`: one short factual sentence
+- `tags`: array of 5-12 short tags
+- `scene`: short scene label
+- `objects`: array of the main visible objects
+- `text_in_image`: visible text or `null`
+
+Optional fields:
+- `metadata`: free-form JSON object
+- `search_text`: concatenated retrieval text; if omitted, the importer builds it
+
+Example:
+
+```json
+{
+  "file_path": "/photos/2026/03/cat.jpg",
+  "filename": "cat.jpg",
+  "sha256": "abc123",
+  "mime_type": "image/jpeg",
+  "size_bytes": 231231,
+  "width": 3024,
+  "height": 4032,
+  "taken_at": "2026-03-12T09:12:00+00:00",
+  "exif": {"Make": "Apple", "Model": "iPhone 15 Pro"},
+  "caption": "A white cat resting on a gray sofa near a sunlit window.",
+  "tags": ["cat", "sofa", "indoor", "sunlight", "pet"],
+  "scene": "living room",
+  "objects": ["cat", "sofa", "window"],
+  "text_in_image": null,
+  "metadata": {"source": "demo"}
+}
+```
+
+## CLI runtime
+
+This skill does not depend on a local Python environment or a checked-out Go source tree.
+It uses the latest published `ai-photos` CLI release from:
+
+- repository: `https://github.com/zoubingwu/openclaw-ai-photos`
+- install dir: `~/.openclaw/ai-photos/bin`
+- binary path: `~/.openclaw/ai-photos/bin/ai-photos`
+- cached version file: `~/.openclaw/ai-photos/bin/version.txt`
+
+At the start of every ai-photos task, run the bootstrap flow exactly once and reuse the resulting binary path for the rest of the task.
+
+### Bootstrap flow
+
+Run this shell block and capture its stdout as `AI_PHOTOS_BIN`:
+
+```bash
+ensure_ai_photos() {
+  AI_PHOTOS_REPO="zoubingwu/openclaw-ai-photos"
+  AI_PHOTOS_BIN_DIR="$HOME/.openclaw/ai-photos/bin"
+  AI_PHOTOS_BIN="$AI_PHOTOS_BIN_DIR/ai-photos"
+  AI_PHOTOS_VERSION_FILE="$AI_PHOTOS_BIN_DIR/version.txt"
+
+  mkdir -p "$AI_PHOTOS_BIN_DIR"
+
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$os" in
+    darwin) goos="darwin" ;;
+    linux) goos="linux" ;;
+    *)
+      echo "unsupported platform: $os" >&2
+      return 1
+      ;;
+  esac
+
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) goarch="amd64" ;;
+    arm64|aarch64) goarch="arm64" ;;
+    *)
+      echo "unsupported architecture: $arch" >&2
+      return 1
+      ;;
+  esac
+
+  latest_tag="$(
+    curl -fsSL "https://api.github.com/repos/${AI_PHOTOS_REPO}/releases/latest" \
+    | tr -d '\n' \
+    | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p'
+  )"
+
+  current_tag=""
+  if [ -f "$AI_PHOTOS_VERSION_FILE" ]; then
+    current_tag="$(cat "$AI_PHOTOS_VERSION_FILE")"
+  fi
+
+  if [ -z "$latest_tag" ]; then
+    if [ -x "$AI_PHOTOS_BIN" ]; then
+      printf '%s\n' "$AI_PHOTOS_BIN"
+      return 0
+    fi
+    echo "could not resolve latest ai-photos release tag" >&2
+    return 1
+  fi
+
+  if [ ! -x "$AI_PHOTOS_BIN" ] || [ "$current_tag" != "$latest_tag" ]; then
+    archive_name="ai-photos_${latest_tag}_${goos}_${goarch}.tar.gz"
+    tmp_dir="$(mktemp -d)"
+    had_existing_binary=0
+    if [ -x "$AI_PHOTOS_BIN" ]; then
+      had_existing_binary=1
+    fi
+
+    if curl -fL "https://github.com/${AI_PHOTOS_REPO}/releases/download/${latest_tag}/${archive_name}" -o "$tmp_dir/${archive_name}" \
+      && tar -xzf "$tmp_dir/${archive_name}" -C "$tmp_dir" \
+      && install -m 0755 "$tmp_dir/ai-photos" "$AI_PHOTOS_BIN"; then
+      printf '%s\n' "$latest_tag" > "$AI_PHOTOS_VERSION_FILE"
+    else
+      rm -rf "$tmp_dir"
+      if [ "$had_existing_binary" -eq 1 ]; then
+        printf '%s\n' "$AI_PHOTOS_BIN"
+        return 0
+      fi
+      return 1
+    fi
+    rm -rf "$tmp_dir"
+  fi
+
+  printf '%s\n' "$AI_PHOTOS_BIN"
+}
+
+AI_PHOTOS_BIN="$(ensure_ai_photos)"
+```
+
+Rules:
+- always run the bootstrap flow before using the CLI
+- if the latest release lookup fails but a cached binary already exists, continue with the cached binary
+- if the latest release is known but the download or unpack step fails, continue with the cached binary when one already exists
+- if the latest release lookup fails and no cached binary exists, setup is blocked
+- do not tell the user to clone the repository or build the CLI locally unless troubleshooting requires it
+- if you need command details, use `"$AI_PHOTOS_BIN" help` or `"$AI_PHOTOS_BIN" help <subcommand>`
+
 ## Onboarding
 
 ### Step 0 - Choose mode
@@ -94,13 +244,20 @@ Before indexing anything, verify:
 - the selected sources contain supported image files
 - `agents.defaults.imageModel` is vision-capable
 - image analysis actually works on a real image in the current OpenClaw runtime
-- whether `scripts/prepare_image.py` has a usable local image backend: macOS `sips`, Python `Pillow`, or ImageMagick
+- the installed CLI runs successfully
+- local image preparation works on a real sample image through `"$AI_PHOTOS_BIN" prepare-image`
+
+Suggested preflight sequence:
+1. choose one real sample image from the provided sources
+2. run `"$AI_PHOTOS_BIN" prepare-image --mode caption <sample-file>`
+3. on macOS, also run `"$AI_PHOTOS_BIN" prepare-image --mode preview <sample-file>`
+4. inspect the JSON result
 
 If the image backend check fails:
 - on macOS, treat this as blocking because `heic` and local preview preparation depend on `sips`
 - on Linux, do not block setup for `jpg`, `jpeg`, `png`, or `webp`; OpenClaw can still caption those files directly from the original path
 - on Linux, explain that preview preparation and large-image downscaling are reduced without a local backend
-- only suggest installing `Pillow` or ImageMagick when the user wants better local image preparation or troubleshooting requires it
+- only suggest installing ImageMagick when the user wants better local image preparation or troubleshooting requires it
 
 If preflight fails:
 - tell the user setup is blocked in plain language
@@ -128,10 +285,10 @@ For a new album, run exactly one setup command:
 
 ```bash
 # db9
-python3 scripts/setup_album.py --source <photo-source-a> --source <photo-source-b> --backend db9 --target <db>
+"$AI_PHOTOS_BIN" setup --source <photo-source-a> --source <photo-source-b> --backend db9 --target <db>
 
 # TiDB
-python3 scripts/setup_album.py --source <photo-source-a> --source <photo-source-b> --backend tidb --target /path/to/tidb-target.json
+"$AI_PHOTOS_BIN" setup --source <photo-source-a> --source <photo-source-b> --backend tidb --target /path/to/tidb-target.json
 ```
 
 Read the JSON output:
@@ -144,6 +301,12 @@ Read the JSON output:
 - verify the backend is reachable
 - verify the album can be searched or written
 - ask only for missing backend details
+
+Suggested reconnect check:
+
+```bash
+"$AI_PHOTOS_BIN" search --recent --limit 1
+```
 
 Do not continue until the backend is confirmed reachable.
 
@@ -160,13 +323,13 @@ User-facing:
 `[AGENT]`
 
 Input:
-- first import: `caption_input_jsonl` from `setup_album.py`
-- later updates: `incremental_manifest_jsonl` from `sync_photos.py`
+- first import: `caption_input_jsonl` from `ai-photos setup`
+- later updates: `incremental_manifest_jsonl` from `ai-photos sync`
 
-Before generating records, read `references/caption-schema.md`.
+Before generating records, read the `Caption schema` section in this file.
 
 `[AGENT]` For each record in the input manifest:
-1. run `python3 scripts/prepare_image.py --mode caption <file_path>`
+1. run `"$AI_PHOTOS_BIN" prepare-image --mode caption <file_path>`
 2. send the returned `output_path` to the vision-capable model
 3. preserve the original manifest fields from the source image
 4. add `caption`, `tags`, `scene`, `objects`, and `text_in_image`
@@ -174,13 +337,13 @@ Before generating records, read `references/caption-schema.md`.
 6. import it with:
 
 ```bash
-python3 scripts/import_records.py /tmp/photos.captioned.jsonl
+"$AI_PHOTOS_BIN" import /tmp/photos.captioned.jsonl
 ```
 
 Rules:
 - keep captions short, factual, retrieval-oriented, and visually grounded
-- `prepare_image.py` prefers macOS `sips` when available and also supports Pillow or ImageMagick for Linux-friendly setups
-- if `prepare_image.py` returns the original file path in caption mode, continue with that file instead of blocking the batch
+- `prepare-image` prefers macOS `sips` when available and also supports ImageMagick for Linux-friendly setups
+- if `prepare-image` returns the original file path in caption mode, continue with that file instead of blocking the batch
 - on Linux, allow direct caption fallback for `jpg`, `jpeg`, `png`, and `webp` when no local image backend is available
 - do not promise Linux `heic` captioning or preview support
 - do not invent names, sensitive traits, or stories
@@ -226,7 +389,7 @@ Then update `<workspace>/HEARTBEAT.md` without removing unrelated content:
 ## ai-photos automatic indexing
 
 - Read and learn how to use `ai-photos` skill
-- Use `python3 <absolute-path-to-ai-photos>/scripts/sync_photos.py` to scan the configured photo folders for changes.
+- Use `~/.openclaw/ai-photos/bin/ai-photos sync` to scan the configured photo folders for changes.
 - Check the configured photo folders for changes and keep the album index up to date.
 - If `to_caption` is `0`, it means nothing needs attention, reply `HEARTBEAT_OK`.
 - If `to_caption` is greater than `0`, run the shared record ingestion flow using `incremental_manifest_jsonl`.
@@ -270,17 +433,17 @@ Immediately after setup:
 When the user asks to find photos, run:
 
 ```bash
-python3 scripts/search_photos.py --text "cat on sofa"
-python3 scripts/search_photos.py --tag cat
-python3 scripts/search_photos.py --date 2026-03
-python3 scripts/search_photos.py --recent
+"$AI_PHOTOS_BIN" search --text "cat on sofa"
+"$AI_PHOTOS_BIN" search --tag cat
+"$AI_PHOTOS_BIN" search --date 2026-03
+"$AI_PHOTOS_BIN" search --recent
 ```
 
 When answering:
 - summarize the best matches clearly and in plain language
 - mention filenames, dates, or captions when useful
 - answer at the product level unless the user asks for implementation details
-- before sending an image file, run `python3 scripts/prepare_image.py --mode preview <matched-file>`
+- before sending an image file, run `"$AI_PHOTOS_BIN" prepare-image --mode preview <matched-file>`
 - send the returned `output_path` when possible
 - if preview preparation fails on Linux without a local image backend, say so briefly and fall back to the original file only when it is safe to send as-is
 - if results are weak, say so and suggest a better query
@@ -289,21 +452,21 @@ When answering:
 
 When the user asks to open a browser view for the album:
 
-1. start the local web service from `web/`
+1. start the local web service
 2. prefer the saved album profile; use environment variables only to fill missing backend fields
 3. wait for the JSON startup line and return the local URL to the user
 4. keep the process running while the user is browsing
 
-Run from `skills/ai-photos/web`:
+Run:
 
 ```bash
-go run ./cmd/ai-photos-web
+"$AI_PHOTOS_BIN" serve
 ```
 
 If the user wants a specific album profile:
 
 ```bash
-go run ./cmd/ai-photos-web --profile default
+"$AI_PHOTOS_BIN" serve --profile default
 ```
 
 The web service provides:
@@ -319,7 +482,7 @@ When a heartbeat arrives for a configured album:
 1. run:
 
 ```bash
-python3 scripts/sync_photos.py
+"$AI_PHOTOS_BIN" sync
 ```
 
 2. read the JSON output

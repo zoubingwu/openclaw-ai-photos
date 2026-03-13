@@ -7,7 +7,7 @@
 - `internal/app` holds shared profile, backend, sync, import, image-prep, and HTTP server logic.
 - `frontend` contains the embedded browser UI served by `ai-photos serve`.
 - `skills/ai-photos` is skill content only. Do not place Go source code there.
-- `skills/ai-photos/references` keeps skill-side reference material.
+- `skills/ai-photos/SKILL.md` is the single source of truth for skill-side instructions and schema details.
 
 ## Rules
 
