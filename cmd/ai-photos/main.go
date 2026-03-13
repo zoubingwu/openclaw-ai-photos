@@ -51,6 +51,14 @@ func main() {
 		return
 	}
 
+	if command == "-v" || command == "--version" || command == "version" {
+		if err := runVersion(args); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	var err error
 	switch command {
 	case "save-profile":
@@ -91,6 +99,14 @@ func runHelp(args []string) error {
 	if err := printSubcommandHelp(os.Stdout, args[0]); err != nil {
 		return err
 	}
+	return nil
+}
+
+func runVersion(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: ai-photos version")
+	}
+	fmt.Fprintln(os.Stdout, app.Version)
 	return nil
 }
 
@@ -472,7 +488,7 @@ func runServe(args []string) error {
 }
 
 func printGlobalHelp(w io.Writer) {
-	fmt.Fprintln(w, "ai-photos")
+	fmt.Fprintf(w, "ai-photos %s\n", app.Version)
 	fmt.Fprintln(w, "  Turn one or more local photo folders into a searchable AI photo album.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "What This CLI Covers")
@@ -516,8 +532,12 @@ func printGlobalHelp(w io.Writer) {
 	fmt.Fprintln(w, "  Local web")
 	fmt.Fprintln(w, "    serve          Start the local browser UI and JSON API.")
 	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  Utility")
+	fmt.Fprintln(w, "    version        Print the CLI version.")
+	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Examples")
 	fmt.Fprintln(w, "  ai-photos help setup")
+	fmt.Fprintln(w, "  ai-photos version")
 	fmt.Fprintln(w, "  ai-photos setup --source ~/Pictures --backend db9 --target my_album")
 	fmt.Fprintln(w, "  ai-photos sync")
 	fmt.Fprintln(w, "  ai-photos import /tmp/photos.captioned.jsonl")
@@ -588,6 +608,8 @@ func printSubcommandHelp(w io.Writer, name string) error {
 		fs.String("cache-dir", "", "Cache directory for thumbnails and preview images.")
 		fs.Bool("open-browser", false, "Open the local URL in the default browser after startup.")
 		printCommandHelp(w, helpServe(), fs)
+	case "version":
+		printCommandHelp(w, helpVersion(), nil)
 	default:
 		return fmt.Errorf("unknown subcommand %q\n\nRun `ai-photos help` to see the available commands", name)
 	}
@@ -595,6 +617,8 @@ func printSubcommandHelp(w io.Writer, name string) error {
 }
 
 func printCommandHelp(w io.Writer, help commandHelp, fs *flag.FlagSet) {
+	fmt.Fprintf(w, "ai-photos %s\n", app.Version)
+	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%s\n", help.Name)
 	fmt.Fprintf(w, "  %s\n", help.Summary)
 	fmt.Fprintln(w)
@@ -895,6 +919,21 @@ func helpServe() commandHelp {
 			"ai-photos serve",
 			"ai-photos serve --profile default",
 			"ai-photos serve --port 8080 --open-browser",
+		},
+	}
+}
+
+func helpVersion() commandHelp {
+	return commandHelp{
+		Name:    "version",
+		Summary: "Print the current ai-photos CLI version.",
+		Usage:   "ai-photos version",
+		Output: []string{
+			"A single version string such as v0.1.0.",
+		},
+		Examples: []string{
+			"ai-photos version",
+			"ai-photos --version",
 		},
 	}
 }

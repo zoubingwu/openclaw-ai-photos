@@ -200,7 +200,7 @@ func (b *tidbBackend) runRaw(ctx context.Context, sql string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "ai-photos/0.1")
+	req.Header.Set("User-Agent", "ai-photos/"+Version)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(b.target.Username+":"+b.target.Password)))
 	req.Header.Set("TiDB-Database", b.target.Database)
 
