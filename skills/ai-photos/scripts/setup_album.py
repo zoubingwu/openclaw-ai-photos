@@ -30,7 +30,7 @@ def main():
         description="Save an album profile, initialize the backend, and build the first incremental manifest"
     )
     ap.add_argument("profile", help="profile name or path to profile JSON")
-    ap.add_argument("--source", action="append", required=True, help="photo source folder; repeat to add multiple roots")
+    ap.add_argument("--source", action="append", required=True, help="photo source path; repeat to add multiple roots")
     ap.add_argument("--backend", choices=["db9", "tidb"], required=True)
     ap.add_argument("--target", required=True, help="db9 database name/id or path to TiDB target JSON")
     ap.add_argument("--display-name")

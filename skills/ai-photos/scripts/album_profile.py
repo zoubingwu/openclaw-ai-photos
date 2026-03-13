@@ -49,7 +49,7 @@ def _require(mapping, key, path):
 
 
 def normalize_sources(sources):
-    """Normalize source folders into unique absolute roots without nested duplicates."""
+    """Normalize photo source paths into unique absolute roots without nested duplicates."""
     normalized = []
     for source in sources:
         path = str(Path(source).expanduser().resolve())

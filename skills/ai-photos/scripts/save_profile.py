@@ -9,7 +9,7 @@ def main():
     """Create or update a managed album profile from CLI arguments."""
     ap = argparse.ArgumentParser(description="Create or update an ai-photos album profile")
     ap.add_argument("profile", help="profile name or path to profile JSON")
-    ap.add_argument("--source", action="append", required=True, help="photo source folder; repeat to add multiple roots")
+    ap.add_argument("--source", action="append", required=True, help="photo source path; repeat to add multiple roots")
     ap.add_argument("--backend", choices=["db9", "tidb"], required=True)
     ap.add_argument("--target", required=True, help="db9 database name/id or path to TiDB target JSON")
     ap.add_argument("--display-name")

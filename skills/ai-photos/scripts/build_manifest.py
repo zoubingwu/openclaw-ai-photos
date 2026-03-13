@@ -65,9 +65,9 @@ def iter_files(root):
 
 
 def main():
-    """Scan source folders and emit a manifest JSONL for downstream indexing."""
-    ap = argparse.ArgumentParser(description="Build photo manifest from one or more source folders")
-    ap.add_argument("sources", nargs="+", help="one or more photo source folders")
+    """Scan photo source paths and emit a manifest JSONL for downstream indexing."""
+    ap = argparse.ArgumentParser(description="Build photo manifest from one or more photo sources")
+    ap.add_argument("sources", nargs="+", help="one or more photo source paths")
     ap.add_argument("-o", "--output", required=True, help="output JSONL path")
     args = ap.parse_args()
 
