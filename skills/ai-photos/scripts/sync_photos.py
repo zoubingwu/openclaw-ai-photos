@@ -24,15 +24,12 @@ def run(cmd):
 
 def fetch_existing_db9(target):
     """Read existing file hashes from a db9 backend for incremental comparison."""
-    out = run(["db9", "db", "sql", target, "-q", "SELECT file_path, sha256 FROM photos;"])
+    out = run(["db9", "--json", "db", "sql", target, "-q", "SELECT file_path, sha256 FROM photos;"])
+    data = json.loads(out)
     rows = {}
-    for line in out.splitlines():
-        line = line.strip()
-        if not line or line.startswith("file_path") or line.startswith("("):
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            rows[parts[0]] = parts[1]
+    for row in data.get("rows", []):
+        if len(row) >= 2:
+            rows[str(row[0])] = str(row[1])
     return rows
 
 
